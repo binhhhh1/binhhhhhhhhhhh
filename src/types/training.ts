@@ -202,6 +202,9 @@ export interface TeamMember {
   gameRole: GameRole;
   mainAgent: string;
   scrimStatus: ScrimMemberStatus;
+  username?: string;
+  managedBy?: string;
+  managedByName?: string;
   isDemo?: boolean;
   joinedAt?: string;
   updatedAt?: string;
@@ -247,7 +250,7 @@ export interface UserProfile {
   activeTeamId?: string;
 }
 
-export type DataSourceMode = 'demo' | 'local_account' | 'cloud';
+export type DataSourceMode = 'local_account' | 'cloud';
 
 export interface GeneratedDailyDrill {
   id: string;

@@ -6,10 +6,8 @@ import {
   Clock,
   Crosshair,
   Flame,
-  RotateCcw,
   Sparkles,
   Target,
-  Trash2,
   Trophy,
 } from 'lucide-react';
 import type {
@@ -47,11 +45,8 @@ interface DashboardViewProps {
   activeOwnerId?: string;
   aiPlan?: AiDailyPlan | null;
   aiLoading?: boolean;
-  onOpenAuthModal?: () => void;
   onNavigate: (section: NavSection, dailyTab?: 'drills' | 'aim') => void;
   onToggleDrillComplete: (drill: TrainingDrill) => void;
-  onResetDemo?: () => void;
-  onClearDemo?: () => void;
 }
 
 const STATUS_LABELS: Record<TrainingDrill['status'], string> = {
@@ -79,11 +74,8 @@ export function DashboardView({
   activeOwnerId,
   aiPlan,
   aiLoading,
-  onOpenAuthModal,
   onNavigate,
   onToggleDrillComplete,
-  onResetDemo,
-  onClearDemo,
 }: DashboardViewProps) {
   const todayDate = getVNDateKey();
   const nowMinutes = timeToMinutes(getVNTimeStr());
@@ -139,23 +131,15 @@ export function DashboardView({
 
   return (
     <div className="space-y-6">
-      {/* Data Source Notice Banner */}
+      {/* Unified Database & Role Control Status Banner */}
       <div className="bg-[#121621] border border-white/[0.08] rounded-xl px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="text-xs text-slate-300 leading-relaxed">
-          {dataMode === 'demo' ? (
+          {dataMode === 'local_account' ? (
             <>
-              <span className="font-semibold text-amber-400">Dữ liệu Demo trải nghiệm</span>
+              <span className="font-semibold text-sky-400">Database Đội Tuyển Đồng Nhất</span>
               <span className="mx-2 text-slate-600">·</span>
               <span>
-                Bạn có thể tự tạo tài khoản riêng hoặc đăng nhập ở góc phải để tách riêng lịch luyện tập của bạn.
-              </span>
-            </>
-          ) : dataMode === 'local_account' ? (
-            <>
-              <span className="font-semibold text-sky-400">Tài khoản cá nhân đang hoạt động</span>
-              <span className="mx-2 text-slate-600">·</span>
-              <span>
-                Dữ liệu luyện tập của {team.name} được lưu riêng trên trình duyệt theo múi giờ Asia/Ho_Chi_Minh.
+                Toàn bộ dữ liệu của {team.name} ({team.tag}) được đồng bộ trực tiếp giữa Ban Huấn Luyện (Manager) và các Tuyển thủ theo múi giờ Asia/Ho_Chi_Minh.
               </span>
             </>
           ) : (
@@ -169,37 +153,13 @@ export function DashboardView({
             </>
           )}
         </div>
-        <div className="flex flex-wrap items-center gap-2 shrink-0">
-          {dataMode === 'demo' && onOpenAuthModal && (
-            <button
-              type="button"
-              onClick={onOpenAuthModal}
-              className="px-3 py-1.5 rounded-lg bg-[#FF4655]/15 hover:bg-[#FF4655]/25 border border-[#FF4655]/30 text-xs font-medium text-white transition-colors whitespace-nowrap"
-            >
-              Tạo tài khoản riêng
-            </button>
-          )}
-          {dataMode === 'demo' && onResetDemo && onClearDemo && (
-            <>
-              <button
-                type="button"
-                onClick={onResetDemo}
-                className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-xs text-slate-200 flex items-center gap-1.5 transition-colors whitespace-nowrap"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>Khôi phục mẫu</span>
-              </button>
-              <button
-                type="button"
-                onClick={onClearDemo}
-                className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-[#FF4655]/20 text-xs text-slate-300 hover:text-white flex items-center gap-1.5 transition-colors whitespace-nowrap"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>Xóa mẫu & Tự nhập</span>
-              </button>
-            </>
-          )}
-        </div>
+        <button
+          type="button"
+          onClick={() => onNavigate('team-management')}
+          className="px-3 py-1.5 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] border border-white/10 text-xs font-medium text-slate-200 transition-colors whitespace-nowrap self-start sm:self-auto shrink-0"
+        >
+          Quản lý Đội &amp; Tuyển thủ
+        </button>
       </div>
 
       {/* AI Daily Coach Banner */}

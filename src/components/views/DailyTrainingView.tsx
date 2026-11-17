@@ -127,6 +127,7 @@ export function DailyTrainingView({
   const [showAllDates, setShowAllDates] = useState<boolean>(false);
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [memberFilter, setMemberFilter] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -163,9 +164,29 @@ export function DailyTrainingView({
   const [quickProofError, setQuickProofError] = useState('');
   const [quickProofBusy, setQuickProofBusy] = useState(false);
 
+  const roleScopedDrills = useMemo(() => {
+    if (activeRole === 'player') {
+      return drills.filter((d) => d.ownerId === currentUserId);
+    }
+    if (memberFilter !== 'ALL') {
+      return drills.filter((d) => d.ownerId === memberFilter);
+    }
+    return drills;
+  }, [drills, activeRole, currentUserId, memberFilter]);
+
+  const roleScopedAimLogs = useMemo(() => {
+    if (activeRole === 'player') {
+      return aimLogs.filter((l) => l.ownerId === currentUserId);
+    }
+    if (memberFilter !== 'ALL') {
+      return aimLogs.filter((l) => l.ownerId === memberFilter);
+    }
+    return aimLogs;
+  }, [aimLogs, activeRole, currentUserId, memberFilter]);
+
   const filteredDrills = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    return drills
+    return roleScopedDrills
       .filter((d) => {
         if (!showAllDates && d.date !== selectedDate) return false;
         if (categoryFilter !== 'ALL' && d.category !== categoryFilter) return false;
@@ -185,7 +206,7 @@ export function DailyTrainingView({
           ? b.date.localeCompare(a.date)
           : a.startTime.localeCompare(b.startTime),
       );
-  }, [drills, showAllDates, selectedDate, categoryFilter, statusFilter, searchQuery]);
+  }, [roleScopedDrills, showAllDates, selectedDate, categoryFilter, statusFilter, searchQuery]);
 
   const openAddModal = () => {
     setEditingDrill(null);
@@ -466,13 +487,20 @@ export function DailyTrainingView({
     });
   };
 
+  const targetOwnerForAi =
+    activeRole === 'coach' && memberFilter !== 'ALL'
+      ? memberFilter
+      : activeRole === 'coach'
+      ? members.find((m) => m.teamRole === 'player')?.uid || currentUserId
+      : currentUserId;
+
   const handleAddSingleAiDrill = async (item: GeneratedDailyDrill) => {
     const drill = toTrainingDrill(item, {
       id: `drill_ai_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       date: targetPlanDate,
       teamId,
       teamOwnerId,
-      ownerId: currentUserId,
+      ownerId: targetOwnerForAi,
       assignedBy: currentUserId,
     });
     await onSaveDrill(drill, true);
@@ -492,7 +520,7 @@ export function DailyTrainingView({
           date: targetPlanDate,
           teamId,
           teamOwnerId,
-          ownerId: currentUserId,
+          ownerId: targetOwnerForAi,
           assignedBy: currentUserId,
         });
         await onSaveDrill(drill, true);
@@ -524,7 +552,9 @@ export function DailyTrainingView({
           >
             <ListChecks className="w-3.5 h-3.5 shrink-0" />
             <span className="truncate">Lịch tập hằng ngày</span>
-            <span className="font-mono text-[11px] opacity-80 shrink-0">({drills.length})</span>
+            <span className="font-mono text-[11px] opacity-80 shrink-0">
+              ({roleScopedDrills.length})
+            </span>
           </button>
           <button
             type="button"
@@ -539,23 +569,42 @@ export function DailyTrainingView({
           >
             <Crosshair className="w-3.5 h-3.5 shrink-0" />
             <span className="truncate">Aim &amp; Kết quả</span>
-            <span className="font-mono text-[11px] opacity-80 shrink-0">({aimLogs.length})</span>
+            <span className="font-mono text-[11px] opacity-80 shrink-0">
+              ({roleScopedAimLogs.length})
+            </span>
           </button>
         </div>
 
-        <div className="text-xs text-slate-400 flex items-center gap-2 px-1">
-          <Camera className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-          <span>
-            {currentTab === 'drills'
-              ? 'Hỗ trợ chụp màn hình trực tiếp, dán Ctrl+V hoặc tải ảnh kết quả chứng minh từng bài tập.'
-              : 'Ghi nhận điểm Aim, biểu đồ tiến bộ và kho ảnh bằng chứng tập luyện.'}
-          </span>
+        <div className="flex flex-wrap items-center gap-2.5 px-1">
+          {activeRole === 'coach' && members.length > 0 && (
+            <select
+              aria-label="Lọc theo tuyển thủ"
+              value={memberFilter}
+              onChange={(e) => setMemberFilter(e.target.value)}
+              className="bg-[#090B10] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white"
+            >
+              <option value="ALL">Tất cả tuyển thủ ({members.length})</option>
+              {members.map((m) => (
+                <option key={m.uid} value={m.uid}>
+                  {m.displayName} ({m.riotId})
+                </option>
+              ))}
+            </select>
+          )}
+          <div className="text-xs text-slate-400 flex items-center gap-1.5">
+            <Camera className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+            <span>
+              {activeRole === 'coach'
+                ? 'Manager có thể giám sát lịch tập và duyệt ảnh bằng chứng của từng tuyển thủ.'
+                : 'Chụp màn hình trực tiếp, dán Ctrl+V hoặc tải ảnh kết quả để nộp cho Manager duyệt.'}
+            </span>
+          </div>
         </div>
       </div>
 
       {currentTab === 'aim' ? (
         <AimTrainingView
-          aimLogs={aimLogs}
+          aimLogs={roleScopedAimLogs}
           currentUserId={currentUserId}
           activeRole={activeRole}
           dataMode={dataMode}
@@ -938,8 +987,15 @@ export function DailyTrainingView({
                         {members.length > 0 && (
                           <>
                             <span aria-hidden="true">·</span>
-                            <span>{getMemberName(drill.ownerId)}</span>
+                            <span className="text-slate-200 font-medium">
+                              {getMemberName(drill.ownerId)}
+                            </span>
                           </>
+                        )}
+                        {drill.assignedBy !== drill.ownerId && (
+                          <span className="px-1.5 py-0.5 rounded bg-[#FF4655]/15 border border-[#FF4655]/30 text-[10px] font-semibold text-[#FF4655]">
+                            Giao bởi Manager
+                          </span>
                         )}
                       </div>
 
@@ -1038,15 +1094,17 @@ export function DailyTrainingView({
                     >
                       <Edit3 className="w-4 h-4" />
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => onDeleteDrill(drill.id)}
-                      aria-label={`Xóa '${drill.title}'`}
-                      title="Xóa"
-                      className="p-2 rounded-lg text-slate-400 hover:text-[#FF4655] hover:bg-white/5 transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {(activeRole === 'coach' || drill.assignedBy === currentUserId) && (
+                      <button
+                        type="button"
+                        onClick={() => onDeleteDrill(drill.id)}
+                        aria-label={`Xóa '${drill.title}'`}
+                        title="Xóa"
+                        className="p-2 rounded-lg text-slate-400 hover:text-[#FF4655] hover:bg-white/5 transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
               );

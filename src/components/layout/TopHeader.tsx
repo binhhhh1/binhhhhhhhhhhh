@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Bell, LogIn, LogOut, Menu } from 'lucide-react';
+import { Bell, LogOut, Menu } from 'lucide-react';
 import type { DataSourceMode, NavSection, TeamRole, UserProfile } from '../../types/training';
 import { getVNClockDisplay } from '../../utils/timezone';
 
@@ -21,9 +21,7 @@ interface TopHeaderProps {
   userProfile: UserProfile | null;
   activeRole: TeamRole;
   isAdminAccount?: boolean;
-  onSignIn: () => void;
   onSignOut: () => void;
-  authBusy: boolean;
 }
 
 export function TopHeader({
@@ -35,9 +33,7 @@ export function TopHeader({
   userProfile,
   activeRole,
   isAdminAccount,
-  onSignIn,
   onSignOut,
-  authBusy,
 }: TopHeaderProps) {
   const [clock, setClock] = useState(() => getVNClockDisplay());
   const [imgError, setImgError] = useState(false);
@@ -90,7 +86,7 @@ export function TopHeader({
           )}
         </button>
 
-        {dataMode !== 'demo' && userProfile ? (
+        {userProfile && (
           <div className="flex items-center gap-2.5 pl-2 border-l border-white/10">
             <div className="w-8 h-8 rounded-lg overflow-hidden bg-[#121621] border border-white/10 shrink-0 flex items-center justify-center">
               {!imgError ? (
@@ -116,56 +112,19 @@ export function TopHeader({
                   ? 'Admin · Manager'
                   : activeRole === 'coach'
                   ? 'Manager / Coach'
-                  : 'Player'}{' '}
-                · {dataMode === 'cloud' ? 'Cloud' : 'Tài khoản'}
+                  : 'Tuyển thủ (Player)'}{' '}
+                · {dataMode === 'cloud' ? 'Cloud' : 'Unified DB'}
               </div>
             </div>
             <button
               type="button"
               onClick={onSignOut}
               aria-label="Đăng xuất tài khoản"
-              className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-colors"
+              className="px-2.5 py-1.5 rounded-lg bg-white/[0.04] hover:bg-[#FF4655]/20 text-slate-300 hover:text-white flex items-center gap-1.5 text-xs font-medium transition-colors"
               title="Đăng xuất"
             >
               <LogOut className="w-4 h-4" />
-            </button>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2.5 pl-2 border-l border-white/10">
-            <div className="hidden md:flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg overflow-hidden bg-[#121621] border border-white/10 shrink-0 flex items-center justify-center">
-                {!imgError ? (
-                  <img
-                    src="/src/assets/images/avatar_pro_player_1794933549478.jpg"
-                    alt="Kyro#SGV1"
-                    referrerPolicy="no-referrer"
-                    onError={() => setImgError(true)}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <span className="text-xs font-semibold text-slate-200">KY</span>
-                )}
-              </div>
-              <div className="text-left">
-                <div className="text-xs font-medium text-white whitespace-nowrap">
-                  Kyro#SGV1
-                </div>
-                <div className="text-[11px] text-amber-400 whitespace-nowrap">
-                  Chế độ Demo
-                </div>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={onSignIn}
-              disabled={authBusy}
-              className="px-3 sm:px-3.5 py-2 rounded-lg bg-[#FF4655] hover:bg-[#e53c4a] disabled:opacity-60 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0"
-            >
-              <LogIn className="w-3.5 h-3.5" />
-              <span className="sm:hidden">{authBusy ? 'Đang vào...' : 'Đăng nhập'}</span>
-              <span className="hidden sm:inline">
-                {authBusy ? 'Đang xử lý...' : 'Tài khoản / Đăng nhập'}
-              </span>
+              <span className="hidden sm:inline">Đăng xuất</span>
             </button>
           </div>
         )}

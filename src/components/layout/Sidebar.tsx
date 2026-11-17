@@ -114,10 +114,8 @@ export function Sidebar({
       <div className="p-4 border-t border-white/[0.07] space-y-2 text-xs">
         <div className="text-slate-300 font-medium truncate">
           {dataMode === 'cloud'
-            ? 'Cloud Firestore (Đã đồng bộ)'
-            : dataMode === 'local_account'
-            ? 'Tài khoản riêng (Đã lưu)'
-            : 'Dữ liệu Demo cục bộ'}
+            ? 'Cloud Firestore (Đồng bộ)'
+            : 'Database Đội Tuyển Đồng Nhất'}
         </div>
         <div className="text-slate-400 flex items-center gap-1.5">
           <span>Vai trò:</span>

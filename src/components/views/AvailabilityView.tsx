@@ -416,9 +416,7 @@ export function AvailabilityView({
                   </span>
                 </h2>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  {dataMode === 'demo'
-                    ? 'Đang tính giao điểm lịch rảnh từ dữ liệu Demo của đội hình 6 thành viên.'
-                    : 'Tự động tìm khung giờ tất cả thành viên đều rảnh. Luôn cần xác nhận thủ công.'}
+                  Tự động tìm khung giờ tất cả thành viên đều rảnh trên cơ sở dữ liệu đội tuyển. Luôn cần Manager xác nhận thủ công.
                 </p>
               </div>
             </div>

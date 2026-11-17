@@ -5,6 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI, Type } from '@google/genai';
 import {
+  buildSmartTacticalDailyPlan,
   DEFAULT_AI_FOCUS_AREAS,
   normalizeGeneratedDrills,
 } from './src/utils/aiDrills.ts';
@@ -31,18 +32,81 @@ function createAiClient(): GoogleGenAI | null {
 
 async function startServer() {
   const app = express();
-  app.use(express.json({ limit: '1mb' }));
+  app.use(express.json({ limit: '5mb' }));
 
-  app.post('/api/ai/generate-daily-drills', async (req, res) => {
-    const ai = createAiClient();
-    if (!ai) {
-      res.status(503).json({
-        error:
-          'Máy chủ chưa có GEMINI_API_KEY. Hãy cấu hình secret GEMINI_API_KEY trong phần Secrets của AI Studio để tạo bài tập AI.',
-      });
+  const dataDir = path.resolve(__dirname, '.data');
+  const unifiedStateFile = path.join(dataDir, 'unified-hub-db.json');
+  let memoryHubState: {
+    accounts?: unknown[];
+    dataset?: Record<string, unknown>;
+    updatedAt?: string;
+  } | null = null;
+
+  const readPersistedHubState = () => {
+    if (memoryHubState) return memoryHubState;
+    try {
+      if (fs.existsSync(unifiedStateFile)) {
+        const raw = fs.readFileSync(unifiedStateFile, 'utf-8');
+        const parsed = JSON.parse(raw);
+        if (parsed && Array.isArray(parsed.accounts) && parsed.dataset) {
+          memoryHubState = parsed;
+          return memoryHubState;
+        }
+      }
+    } catch {
+      // ignore read errors
+    }
+    return null;
+  };
+
+  const writePersistedHubState = (payload: {
+    accounts: unknown[];
+    dataset: Record<string, unknown>;
+    updatedAt: string;
+  }) => {
+    memoryHubState = payload;
+    try {
+      if (!fs.existsSync(dataDir)) {
+        fs.mkdirSync(dataDir, { recursive: true });
+      }
+      fs.writeFileSync(unifiedStateFile, JSON.stringify(payload), 'utf-8');
+    } catch {
+      // ignore disk write errors in read-only environments
+    }
+  };
+
+  app.get('/api/hub-state', (_req, res) => {
+    const state = readPersistedHubState();
+    if (!state) {
+      res.json({ empty: true });
       return;
     }
+    res.json(state);
+  });
 
+  app.put('/api/hub-state', (req, res) => {
+    const body = req.body as {
+      accounts?: unknown[];
+      dataset?: Record<string, unknown>;
+      updatedAt?: string;
+    };
+    if (!body || !Array.isArray(body.accounts) || !body.dataset) {
+      res.status(400).json({ error: 'Invalid unified hub state payload' });
+      return;
+    }
+    const payload = {
+      accounts: body.accounts,
+      dataset: body.dataset,
+      updatedAt:
+        typeof body.updatedAt === 'string'
+          ? body.updatedAt
+          : new Date().toISOString(),
+    };
+    writePersistedHubState(payload);
+    res.json({ ok: true, updatedAt: payload.updatedAt });
+  });
+
+  app.post('/api/ai/generate-daily-drills', async (req, res) => {
     const body = (req.body || {}) as {
       date?: string;
       playerName?: string;
@@ -50,6 +114,7 @@ async function startServer() {
       mainAgent?: string;
       focusAreas?: string[];
       durationBudgetMin?: number;
+      variationSeed?: number;
       recentStats?: {
         avgAccuracy?: number;
         lastScore?: number;
@@ -74,6 +139,23 @@ async function startServer() {
     const gameRole = String(body.gameRole || 'Duelist').slice(0, 40);
     const mainAgent = String(body.mainAgent || 'Jett').slice(0, 40);
     const playerName = String(body.playerName || 'Tuyển thủ').slice(0, 60);
+
+    const fallbackPlanInput = {
+      date: dateKey,
+      playerName,
+      gameRole,
+      mainAgent,
+      focusAreas,
+      durationBudgetMin,
+      variationSeed: Number(body.variationSeed) || 0,
+      recentStats: body.recentStats,
+    };
+
+    const ai = createAiClient();
+    if (!ai) {
+      res.json(buildSmartTacticalDailyPlan(fallbackPlanInput));
+      return;
+    }
 
     const recentSummary = body.recentStats
       ? `Dữ liệu Aim gần nhất: ${body.recentStats.totalSessions ?? 0} buổi, Accuracy trung bình ${body.recentStats.avgAccuracy ?? 0}%, điểm gần nhất ${body.recentStats.lastScore ?? 0}.`
@@ -175,10 +257,7 @@ async function startServer() {
 
       const rawText = response?.text;
       if (!rawText) {
-        if (lastErr) throw lastErr;
-        res.status(502).json({
-          error: 'Mô hình AI không trả về nội dung giáo án. Vui lòng thử lại.',
-        });
+        res.json(buildSmartTacticalDailyPlan(fallbackPlanInput));
         return;
       }
 
@@ -189,9 +268,7 @@ async function startServer() {
       const drills = normalizeGeneratedDrills(parsed.drills, dateKey);
 
       if (drills.length === 0) {
-        res.status(502).json({
-          error: 'Dữ liệu bài tập AI trả về không hợp lệ. Vui lòng tạo lại.',
-        });
+        res.json(buildSmartTacticalDailyPlan(fallbackPlanInput));
         return;
       }
 
@@ -206,17 +283,8 @@ async function startServer() {
         drills,
       });
     } catch (err) {
-      const rawMessage =
-        err instanceof Error
-          ? err.message
-          : 'Không thể kết nối Gemini API để tạo bài tập.';
-      console.error('AI Daily Drill Error:', err);
-      const isUnavailable =
-        rawMessage.includes('503') || rawMessage.includes('UNAVAILABLE');
-      const friendlyMessage = isUnavailable
-        ? 'Máy chủ Gemini AI đang quá tải tạm thời (503). Vui lòng nhấn "Thử lại" sau ít giây.'
-        : rawMessage;
-      res.status(isUnavailable ? 503 : 500).json({ error: friendlyMessage });
+      console.warn('AI Daily Drill upstream error, using smart tactical plan fallback:', err);
+      res.json(buildSmartTacticalDailyPlan(fallbackPlanInput));
     }
   });
 
