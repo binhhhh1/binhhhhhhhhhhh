@@ -1,0 +1,235 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Private user profile and personal esports preferences isolated per user.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "format": "email", "maxLength": 254 },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "riotId": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "gameRole": { "type": "string", "enum": ["Duelist", "Initiator", "Controller", "Sentinel", "Flex"] },
+        "mainAgent": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "activeTeamId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "displayName", "riotId", "gameRole", "mainAgent", "createdAt", "updatedAt"]
+    },
+    "Team": {
+      "title": "Team",
+      "description": "Esports team workspace owning schedules, drills, scrims, and roster.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "tag": { "type": "string", "minLength": 2, "maxLength": 10 },
+        "ownerId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "weeklyGoalHours": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "tag", "ownerId", "weeklyGoalHours", "createdAt", "updatedAt"]
+    },
+    "TeamMember": {
+      "title": "TeamMember",
+      "description": "Roster membership record defining RBAC teamRole and Valorant role.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "riotId": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "teamRole": { "type": "string", "enum": ["coach", "player"] },
+        "gameRole": { "type": "string", "enum": ["Duelist", "Initiator", "Controller", "Sentinel", "Flex"] },
+        "mainAgent": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "scrimStatus": { "type": "string", "enum": ["ready", "sub", "unavailable"] },
+        "joinedAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "displayName", "riotId", "teamRole", "gameRole", "mainAgent", "scrimStatus", "joinedAt", "updatedAt"]
+    },
+    "TrainingDrill": {
+      "title": "TrainingDrill",
+      "description": "Daily training session or coach-assigned drill.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "teamId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "ownerId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "assignedBy": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "category": {
+          "type": "string",
+          "enum": [
+            "Aim Training",
+            "Deathmatch",
+            "Team Deathmatch",
+            "Range Practice",
+            "Movement Training",
+            "Crosshair Placement",
+            "Spray Control",
+            "Agent Practice",
+            "Map Knowledge",
+            "VOD Review",
+            "Game Sense",
+            "Communication",
+            "Scrim Review"
+          ]
+        },
+        "date": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$", "maxLength": 10 },
+        "startTime": { "type": "string", "pattern": "^[0-9]{2}:[0-9]{2}$", "maxLength": 5 },
+        "durationMin": { "type": "number" },
+        "goal": { "type": "string", "maxLength": 200 },
+        "description": { "type": "string", "maxLength": 600 },
+        "status": { "type": "string", "enum": ["todo", "in_progress", "completed", "skipped"] },
+        "actualResult": { "type": "string", "maxLength": 200 },
+        "notes": { "type": "string", "maxLength": 500 },
+        "proofUrl": { "type": "string", "maxLength": 500 },
+        "proofNote": { "type": "string", "maxLength": 200 },
+        "proofVerified": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "teamId", "ownerId", "assignedBy", "title", "category", "date", "startTime", "durationMin", "status", "createdAt", "updatedAt"]
+    },
+    "AimLog": {
+      "title": "AimLog",
+      "description": "Manual aim training session record.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "teamId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "ownerId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "date": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$", "maxLength": 10 },
+        "exerciseName": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "platform": { "type": "string", "enum": ["Aimlabs", "Kovaak's", "Valorant Range", "Deathmatch"] },
+        "focusArea": { "type": "string", "enum": ["Micro Adjustment", "Flicking", "Tracking", "Precision", "Speed", "Crosshair Placement"] },
+        "durationMin": { "type": "number" },
+        "score": { "type": "number" },
+        "accuracy": { "type": "number" },
+        "notes": { "type": "string", "maxLength": 400 },
+        "proofUrl": { "type": "string", "maxLength": 500 },
+        "proofType": { "type": "string", "enum": ["screenshot", "video", "link"] },
+        "proofNote": { "type": "string", "maxLength": 200 },
+        "proofVerified": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "teamId", "ownerId", "date", "exerciseName", "platform", "focusArea", "durationMin", "score", "accuracy", "createdAt", "updatedAt"]
+    },
+    "Scrim": {
+      "title": "Scrim",
+      "description": "Team scrimmage match schedule and map results.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "teamId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdBy": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "opponent": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "date": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$", "maxLength": 10 },
+        "startTime": { "type": "string", "pattern": "^[0-9]{2}:[0-9]{2}$", "maxLength": 5 },
+        "endTime": { "type": "string", "pattern": "^[0-9]{2}:[0-9]{2}$", "maxLength": 5 },
+        "mapCount": { "type": "number" },
+        "maps": { "type": "array" },
+        "server": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "status": { "type": "string", "enum": ["planned", "confirmed", "live", "completed", "cancelled"] },
+        "notes": { "type": "string", "maxLength": 600 },
+        "vodUrl": { "type": "string", "maxLength": 300 },
+        "mapResultsText": { "type": "string", "maxLength": 400 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "teamId", "createdBy", "opponent", "date", "startTime", "endTime", "mapCount", "maps", "server", "status", "createdAt", "updatedAt"]
+    },
+    "AvailabilitySlot": {
+      "title": "AvailabilitySlot",
+      "description": "Player or coach time window availability or busy block.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "teamId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "ownerId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "memberName": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "date": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$", "maxLength": 10 },
+        "startTime": { "type": "string", "pattern": "^[0-9]{2}:[0-9]{2}$", "maxLength": 5 },
+        "endTime": { "type": "string", "pattern": "^[0-9]{2}:[0-9]{2}$", "maxLength": 5 },
+        "slotType": { "type": "string", "enum": ["available", "busy"] },
+        "notes": { "type": "string", "maxLength": 300 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "teamId", "ownerId", "memberName", "date", "startTime", "endTime", "slotType", "createdAt", "updatedAt"]
+    },
+    "TrainingTemplate": {
+      "title": "TrainingTemplate",
+      "description": "Reusable daily training routine template.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "teamId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "ownerId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "description": { "type": "string", "maxLength": 300 },
+        "items": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "teamId", "ownerId", "name", "items", "createdAt", "updatedAt"]
+    },
+    "TeamNotification": {
+      "title": "TeamNotification",
+      "description": "Notification item for training, scrims, and team availability updates.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "teamId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "actorId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "type": { "type": "string", "enum": ["drill_due", "scrim_upcoming", "scrim_created", "scrim_updated", "availability_updated", "drill_assigned"] },
+        "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "message": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "teamId", "actorId", "type", "title", "message", "read", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Private user profile isolated to the authenticated owner."
+    },
+    "/teams/{teamId}": {
+      "schema": { "$ref": "#/entities/Team" },
+      "description": "Top-level esports team workspace."
+    },
+    "/teams/{teamId}/members/{memberId}": {
+      "schema": { "$ref": "#/entities/TeamMember" },
+      "description": "Roster membership and RBAC role per user inside a team."
+    },
+    "/teams/{teamId}/drills/{drillId}": {
+      "schema": { "$ref": "#/entities/TrainingDrill" },
+      "description": "Daily training drills and coach-assigned tasks."
+    },
+    "/teams/{teamId}/aimLogs/{logId}": {
+      "schema": { "$ref": "#/entities/AimLog" },
+      "description": "Manual aim training performance records."
+    },
+    "/teams/{teamId}/scrims/{scrimId}": {
+      "schema": { "$ref": "#/entities/Scrim" },
+      "description": "Team scrimmage schedules and post-match VOD/results."
+    },
+    "/teams/{teamId}/availabilities/{slotId}": {
+      "schema": { "$ref": "#/entities/AvailabilitySlot" },
+      "description": "Player and coach availability or busy time windows."
+    },
+    "/teams/{teamId}/templates/{templateId}": {
+      "schema": { "$ref": "#/entities/TrainingTemplate" },
+      "description": "Reusable daily training routine templates."
+    },
+    "/teams/{teamId}/notifications/{notifId}": {
+      "schema": { "$ref": "#/entities/TeamNotification" },
+      "description": "Team schedule and training alerts."
+    }
+  }
+}

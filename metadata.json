@@ -1,0 +1,6 @@
+{
+  "name": "VALORANT TRAINING HUB",
+  "description": "Hệ thống quản lý lịch trình, bài tập Aim, lịch Scrim, lịch trống đội tuyển và phân tích hiệu suất luyện tập dành cho tuyển thủ Valorant.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

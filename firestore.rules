@@ -1,0 +1,477 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Primitive Helpers ---
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isVerifiedUser() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isVerifiedUser() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        request.auth.token.email == 'binhkuta564@gmail.com'
+      );
+    }
+
+    function isValidDateStr(d) {
+      return d is string && d.size() == 10 && d.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
+    }
+
+    function isValidTimeStr(t) {
+      return t is string && t.size() == 5 && t.matches('^[0-9]{2}:[0-9]{2}$');
+    }
+
+    function isValidGameRole(r) {
+      return r in ['Duelist', 'Initiator', 'Controller', 'Sentinel', 'Flex'];
+    }
+
+    function teamExists(teamId) {
+      return exists(/databases/$(database)/documents/teams/$(teamId));
+    }
+
+    function isTeamMember(teamId) {
+      return isVerifiedUser() && teamExists(teamId) && (
+        get(/databases/$(database)/documents/teams/$(teamId)).data.ownerId == request.auth.uid ||
+        exists(/databases/$(database)/documents/teams/$(teamId)/members/$(request.auth.uid))
+      );
+    }
+
+    function isTeamCoach(teamId) {
+      return isVerifiedUser() && teamExists(teamId) && (
+        get(/databases/$(database)/documents/teams/$(teamId)).data.ownerId == request.auth.uid ||
+        (
+          exists(/databases/$(database)/documents/teams/$(teamId)/members/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/teams/$(teamId)/members/$(request.auth.uid)).data.teamRole == 'coach'
+        )
+      );
+    }
+
+    // --- Validation Blueprints ---
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['uid', 'email', 'displayName', 'riotId', 'gameRole', 'mainAgent', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['uid', 'email', 'displayName', 'riotId', 'gameRole', 'mainAgent', 'activeTeamId', 'createdAt', 'updatedAt']) &&
+        isValidId(data.uid) &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 254 &&
+        data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 80 &&
+        data.riotId is string && data.riotId.size() >= 1 && data.riotId.size() <= 40 &&
+        isValidGameRole(data.gameRole) &&
+        data.mainAgent is string && data.mainAgent.size() >= 1 && data.mainAgent.size() <= 40 &&
+        (!('activeTeamId' in data) || isValidId(data.activeTeamId)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidTeam(data) {
+      return data.keys().hasAll(['id', 'name', 'tag', 'ownerId', 'weeklyGoalHours', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'name', 'tag', 'ownerId', 'weeklyGoalHours', 'createdAt', 'updatedAt']) &&
+        isValidId(data.id) &&
+        data.name is string && data.name.size() >= 2 && data.name.size() <= 80 &&
+        data.tag is string && data.tag.size() >= 2 && data.tag.size() <= 10 &&
+        isValidId(data.ownerId) &&
+        data.weeklyGoalHours is number && data.weeklyGoalHours >= 1 && data.weeklyGoalHours <= 120 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidTeamMember(data) {
+      return data.keys().hasAll(['uid', 'teamOwnerId', 'displayName', 'riotId', 'teamRole', 'gameRole', 'mainAgent', 'scrimStatus', 'joinedAt', 'updatedAt']) &&
+        data.keys().hasOnly(['uid', 'teamOwnerId', 'displayName', 'riotId', 'teamRole', 'gameRole', 'mainAgent', 'scrimStatus', 'joinedAt', 'updatedAt']) &&
+        isValidId(data.uid) &&
+        isValidId(data.teamOwnerId) &&
+        data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 80 &&
+        data.riotId is string && data.riotId.size() >= 1 && data.riotId.size() <= 40 &&
+        data.teamRole in ['coach', 'player'] &&
+        isValidGameRole(data.gameRole) &&
+        data.mainAgent is string && data.mainAgent.size() >= 1 && data.mainAgent.size() <= 40 &&
+        data.scrimStatus in ['ready', 'sub', 'unavailable'] &&
+        data.joinedAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidDrill(data) {
+      return data.keys().hasAll(['id', 'teamId', 'teamOwnerId', 'ownerId', 'assignedBy', 'title', 'category', 'date', 'startTime', 'durationMin', 'status', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'teamId', 'teamOwnerId', 'ownerId', 'assignedBy', 'title', 'category', 'date', 'startTime', 'durationMin', 'goal', 'description', 'status', 'actualResult', 'notes', 'proofUrl', 'proofNote', 'proofVerified', 'createdAt', 'updatedAt']) &&
+        isValidId(data.id) &&
+        isValidId(data.teamId) &&
+        isValidId(data.teamOwnerId) &&
+        isValidId(data.ownerId) &&
+        isValidId(data.assignedBy) &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 120 &&
+        data.category in ['Aim Training', 'Deathmatch', 'Team Deathmatch', 'Range Practice', 'Movement Training', 'Crosshair Placement', 'Spray Control', 'Agent Practice', 'Map Knowledge', 'VOD Review', 'Game Sense', 'Communication', 'Scrim Review'] &&
+        isValidDateStr(data.date) &&
+        isValidTimeStr(data.startTime) &&
+        data.durationMin is number && data.durationMin >= 5 && data.durationMin <= 480 &&
+        (!('goal' in data) || (data.goal is string && data.goal.size() <= 200)) &&
+        (!('description' in data) || (data.description is string && data.description.size() <= 600)) &&
+        data.status in ['todo', 'in_progress', 'completed', 'skipped'] &&
+        (!('actualResult' in data) || (data.actualResult is string && data.actualResult.size() <= 200)) &&
+        (!('notes' in data) || (data.notes is string && data.notes.size() <= 500)) &&
+        (!('proofUrl' in data) || (data.proofUrl is string && data.proofUrl.size() <= 500)) &&
+        (!('proofNote' in data) || (data.proofNote is string && data.proofNote.size() <= 200)) &&
+        (!('proofVerified' in data) || data.proofVerified is bool) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidAimLog(data) {
+      return data.keys().hasAll(['id', 'teamId', 'teamOwnerId', 'ownerId', 'date', 'exerciseName', 'platform', 'focusArea', 'durationMin', 'score', 'accuracy', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'teamId', 'teamOwnerId', 'ownerId', 'date', 'exerciseName', 'platform', 'focusArea', 'durationMin', 'score', 'accuracy', 'notes', 'proofUrl', 'proofType', 'proofNote', 'proofVerified', 'createdAt', 'updatedAt']) &&
+        isValidId(data.id) &&
+        isValidId(data.teamId) &&
+        isValidId(data.teamOwnerId) &&
+        isValidId(data.ownerId) &&
+        isValidDateStr(data.date) &&
+        data.exerciseName is string && data.exerciseName.size() >= 1 && data.exerciseName.size() <= 100 &&
+        data.platform in ['Aimlabs', 'Kovaak\'s', 'Valorant Range', 'Deathmatch'] &&
+        data.focusArea in ['Micro Adjustment', 'Flicking', 'Tracking', 'Precision', 'Speed', 'Crosshair Placement'] &&
+        data.durationMin is number && data.durationMin >= 1 && data.durationMin <= 360 &&
+        data.score is number && data.score >= 0 && data.score <= 10000000 &&
+        data.accuracy is number && data.accuracy >= 0 && data.accuracy <= 100 &&
+        (!('notes' in data) || (data.notes is string && data.notes.size() <= 400)) &&
+        (!('proofUrl' in data) || (data.proofUrl is string && data.proofUrl.size() <= 500)) &&
+        (!('proofType' in data) || data.proofType in ['screenshot', 'video', 'link']) &&
+        (!('proofNote' in data) || (data.proofNote is string && data.proofNote.size() <= 200)) &&
+        (!('proofVerified' in data) || data.proofVerified is bool) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidScrim(data) {
+      return data.keys().hasAll(['id', 'teamId', 'teamOwnerId', 'createdBy', 'opponent', 'date', 'startTime', 'endTime', 'mapCount', 'maps', 'server', 'status', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'teamId', 'teamOwnerId', 'createdBy', 'opponent', 'date', 'startTime', 'endTime', 'mapCount', 'maps', 'server', 'status', 'notes', 'vodUrl', 'mapResultsText', 'createdAt', 'updatedAt']) &&
+        isValidId(data.id) &&
+        isValidId(data.teamId) &&
+        isValidId(data.teamOwnerId) &&
+        isValidId(data.createdBy) &&
+        data.opponent is string && data.opponent.size() >= 1 && data.opponent.size() <= 80 &&
+        isValidDateStr(data.date) &&
+        isValidTimeStr(data.startTime) &&
+        isValidTimeStr(data.endTime) &&
+        data.mapCount is number && data.mapCount >= 1 && data.mapCount <= 5 &&
+        data.maps is list && data.maps.size() >= 1 && data.maps.size() <= 5 && data.maps[0] is string && data.maps[0].size() <= 30 &&
+        data.server is string && data.server.size() >= 1 && data.server.size() <= 40 &&
+        data.status in ['planned', 'confirmed', 'live', 'completed', 'cancelled'] &&
+        (!('notes' in data) || (data.notes is string && data.notes.size() <= 600)) &&
+        (!('vodUrl' in data) || (data.vodUrl is string && data.vodUrl.size() <= 300)) &&
+        (!('mapResultsText' in data) || (data.mapResultsText is string && data.mapResultsText.size() <= 400)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidAvailability(data) {
+      return data.keys().hasAll(['id', 'teamId', 'teamOwnerId', 'ownerId', 'memberName', 'date', 'startTime', 'endTime', 'slotType', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'teamId', 'teamOwnerId', 'ownerId', 'memberName', 'date', 'startTime', 'endTime', 'slotType', 'notes', 'createdAt', 'updatedAt']) &&
+        isValidId(data.id) &&
+        isValidId(data.teamId) &&
+        isValidId(data.teamOwnerId) &&
+        isValidId(data.ownerId) &&
+        data.memberName is string && data.memberName.size() >= 1 && data.memberName.size() <= 80 &&
+        isValidDateStr(data.date) &&
+        isValidTimeStr(data.startTime) &&
+        isValidTimeStr(data.endTime) &&
+        data.slotType in ['available', 'busy'] &&
+        (!('notes' in data) || (data.notes is string && data.notes.size() <= 300)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidTemplate(data) {
+      return data.keys().hasAll(['id', 'teamId', 'teamOwnerId', 'ownerId', 'name', 'items', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'teamId', 'teamOwnerId', 'ownerId', 'name', 'description', 'items', 'createdAt', 'updatedAt']) &&
+        isValidId(data.id) &&
+        isValidId(data.teamId) &&
+        isValidId(data.teamOwnerId) &&
+        isValidId(data.ownerId) &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 100 &&
+        (!('description' in data) || (data.description is string && data.description.size() <= 300)) &&
+        data.items is list && data.items.size() >= 1 && data.items.size() <= 15 && data.items[0] is map &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidNotification(data) {
+      return data.keys().hasAll(['id', 'teamId', 'teamOwnerId', 'actorId', 'type', 'title', 'message', 'read', 'createdAt']) &&
+        data.keys().hasOnly(['id', 'teamId', 'teamOwnerId', 'actorId', 'type', 'title', 'message', 'read', 'createdAt']) &&
+        isValidId(data.id) &&
+        isValidId(data.teamId) &&
+        isValidId(data.teamOwnerId) &&
+        isValidId(data.actorId) &&
+        data.type in ['drill_due', 'scrim_upcoming', 'scrim_created', 'scrim_updated', 'availability_updated', 'drill_assigned'] &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 120 &&
+        data.message is string && data.message.size() >= 1 && data.message.size() <= 300 &&
+        data.read is bool &&
+        data.createdAt is timestamp;
+    }
+
+    // --- Collection Rules ---
+    match /admins/{adminId} {
+      allow get: if isOwner(adminId) || isAdmin();
+      allow list, create, update, delete: if false;
+    }
+
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if false;
+      allow create: if isVerifiedUser() && isValidId(userId) && isOwner(userId) &&
+        isValidUserProfile(incoming()) &&
+        incoming().uid == userId &&
+        incoming().email == request.auth.token.email &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser() && isValidId(userId) && (isOwner(userId) || isAdmin()) &&
+        isValidUserProfile(incoming()) &&
+        incoming().uid == existing().uid &&
+        incoming().email == existing().email &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'riotId', 'gameRole', 'mainAgent', 'activeTeamId', 'updatedAt']);
+      allow delete: if isValidId(userId) && (isOwner(userId) || isAdmin());
+    }
+
+    match /teams/{teamId} {
+      allow get: if isValidId(teamId) && (isTeamMember(teamId) || isAdmin());
+      allow list: if isVerifiedUser() && (resource.data.ownerId == request.auth.uid || isAdmin());
+      allow create: if isVerifiedUser() && isValidId(teamId) &&
+        isValidTeam(incoming()) &&
+        incoming().id == teamId &&
+        incoming().ownerId == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser() && isValidId(teamId) &&
+        isValidTeam(incoming()) &&
+        (existing().ownerId == request.auth.uid || isTeamCoach(teamId) || isAdmin()) &&
+        incoming().id == existing().id &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['name', 'tag', 'weeklyGoalHours', 'updatedAt']);
+      allow delete: if isVerifiedUser() && isValidId(teamId) && (existing().ownerId == request.auth.uid || isAdmin());
+
+      match /members/{memberId} {
+        allow get: if isValidId(teamId) && isValidId(memberId) && (isTeamMember(teamId) || isAdmin());
+        allow list: if isVerifiedUser() && (resource.data.teamOwnerId == request.auth.uid || resource.data.uid == request.auth.uid || isAdmin());
+        allow create: if isVerifiedUser() && isValidId(teamId) && isValidId(memberId) &&
+          isValidTeamMember(incoming()) &&
+          incoming().uid == memberId &&
+          incoming().joinedAt == request.time &&
+          incoming().updatedAt == request.time &&
+          (
+            (existsAfter(/databases/$(database)/documents/teams/$(teamId)) &&
+             getAfter(/databases/$(database)/documents/teams/$(teamId)).data.ownerId == request.auth.uid &&
+             incoming().teamOwnerId == request.auth.uid &&
+             (memberId == request.auth.uid || incoming().teamRole == 'player')) ||
+            (isTeamCoach(teamId) &&
+             incoming().teamOwnerId == get(/databases/$(database)/documents/teams/$(teamId)).data.ownerId) ||
+            (teamExists(teamId) &&
+             memberId == request.auth.uid &&
+             incoming().teamOwnerId == get(/databases/$(database)/documents/teams/$(teamId)).data.ownerId &&
+             incoming().teamRole == 'player')
+          );
+        allow update: if isVerifiedUser() && isValidId(teamId) && isValidId(memberId) &&
+          isValidTeamMember(incoming()) &&
+          incoming().uid == existing().uid &&
+          incoming().teamOwnerId == existing().teamOwnerId &&
+          incoming().joinedAt == existing().joinedAt &&
+          incoming().updatedAt == request.time && (
+            isAdmin() ||
+            (isTeamCoach(teamId) && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'riotId', 'teamRole', 'gameRole', 'mainAgent', 'scrimStatus', 'updatedAt'])) ||
+            (isOwner(memberId) && incoming().teamRole == existing().teamRole && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'riotId', 'gameRole', 'mainAgent', 'scrimStatus', 'updatedAt']))
+          );
+        allow delete: if isValidId(teamId) && isValidId(memberId) && (isTeamCoach(teamId) || isOwner(memberId) || isAdmin());
+      }
+
+      match /drills/{drillId} {
+        allow get: if isValidId(teamId) && isValidId(drillId) && (isTeamMember(teamId) || isAdmin());
+        allow list: if isVerifiedUser() && (resource.data.teamOwnerId == request.auth.uid || resource.data.ownerId == request.auth.uid || isAdmin());
+        allow create: if isVerifiedUser() && isValidId(teamId) && isValidId(drillId) &&
+          isValidDrill(incoming()) &&
+          isTeamMember(teamId) &&
+          incoming().id == drillId &&
+          incoming().teamId == teamId &&
+          incoming().teamOwnerId == get(/databases/$(database)/documents/teams/$(teamId)).data.ownerId &&
+          incoming().assignedBy == request.auth.uid &&
+          (incoming().ownerId == request.auth.uid || isTeamCoach(teamId)) &&
+          (!('proofVerified' in incoming()) || incoming().proofVerified == false || isTeamCoach(teamId)) &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time;
+        allow update: if isVerifiedUser() && isValidId(teamId) && isValidId(drillId) &&
+          isValidDrill(incoming()) &&
+          isTeamMember(teamId) &&
+          incoming().id == existing().id &&
+          incoming().teamId == existing().teamId &&
+          incoming().teamOwnerId == existing().teamOwnerId &&
+          incoming().assignedBy == existing().assignedBy &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time && (
+            isAdmin() ||
+            (isTeamCoach(teamId) && incoming().diff(existing()).affectedKeys().hasOnly(['ownerId', 'title', 'category', 'date', 'startTime', 'durationMin', 'goal', 'description', 'status', 'actualResult', 'notes', 'proofUrl', 'proofNote', 'proofVerified', 'updatedAt'])) ||
+            (existing().ownerId == request.auth.uid && incoming().ownerId == existing().ownerId && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'category', 'date', 'startTime', 'durationMin', 'goal', 'description', 'status', 'actualResult', 'notes', 'proofUrl', 'proofNote', 'updatedAt']))
+          );
+        allow delete: if isValidId(teamId) && isValidId(drillId) && (isTeamCoach(teamId) || (isTeamMember(teamId) && existing().ownerId == request.auth.uid) || isAdmin());
+      }
+
+      match /aimLogs/{logId} {
+        allow get: if isValidId(teamId) && isValidId(logId) && (isTeamMember(teamId) || isAdmin());
+        allow list: if isVerifiedUser() && (resource.data.teamOwnerId == request.auth.uid || resource.data.ownerId == request.auth.uid || isAdmin());
+        allow create: if isVerifiedUser() && isValidId(teamId) && isValidId(logId) &&
+          isValidAimLog(incoming()) &&
+          isTeamMember(teamId) &&
+          incoming().id == logId &&
+          incoming().teamId == teamId &&
+          incoming().teamOwnerId == get(/databases/$(database)/documents/teams/$(teamId)).data.ownerId &&
+          incoming().ownerId == request.auth.uid &&
+          (!('proofVerified' in incoming()) || incoming().proofVerified == false || isTeamCoach(teamId)) &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time;
+        allow update: if isVerifiedUser() && isValidId(teamId) && isValidId(logId) &&
+          isValidAimLog(incoming()) &&
+          isTeamMember(teamId) &&
+          incoming().id == existing().id &&
+          incoming().teamId == existing().teamId &&
+          incoming().teamOwnerId == existing().teamOwnerId &&
+          incoming().ownerId == existing().ownerId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time && (
+            isAdmin() ||
+            (isTeamCoach(teamId) && incoming().diff(existing()).affectedKeys().hasOnly(['proofVerified', 'updatedAt'])) ||
+            (existing().ownerId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['date', 'exerciseName', 'platform', 'focusArea', 'durationMin', 'score', 'accuracy', 'notes', 'proofUrl', 'proofType', 'proofNote', 'updatedAt']))
+          );
+        allow delete: if isValidId(teamId) && isValidId(logId) && ((isTeamMember(teamId) && existing().ownerId == request.auth.uid) || isTeamCoach(teamId) || isAdmin());
+      }
+
+      match /scrims/{scrimId} {
+        allow get: if isValidId(teamId) && isValidId(scrimId) && (isTeamMember(teamId) || isAdmin());
+        allow list: if isVerifiedUser() && (resource.data.teamOwnerId == request.auth.uid || resource.data.createdBy == request.auth.uid || isAdmin());
+        allow create: if isVerifiedUser() && isValidId(teamId) && isValidId(scrimId) &&
+          isValidScrim(incoming()) &&
+          isTeamCoach(teamId) &&
+          incoming().id == scrimId &&
+          incoming().teamId == teamId &&
+          incoming().teamOwnerId == get(/databases/$(database)/documents/teams/$(teamId)).data.ownerId &&
+          incoming().createdBy == request.auth.uid &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time;
+        allow update: if isVerifiedUser() && isValidId(teamId) && isValidId(scrimId) &&
+          isValidScrim(incoming()) &&
+          isTeamCoach(teamId) &&
+          incoming().id == existing().id &&
+          incoming().teamId == existing().teamId &&
+          incoming().teamOwnerId == existing().teamOwnerId &&
+          incoming().createdBy == existing().createdBy &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          (existing().status in ['planned', 'confirmed', 'live'] || isAdmin()) && (
+            isAdmin() ||
+            incoming().diff(existing()).affectedKeys().hasOnly(['opponent', 'date', 'startTime', 'endTime', 'mapCount', 'maps', 'server', 'status', 'notes', 'vodUrl', 'mapResultsText', 'updatedAt'])
+          );
+        allow delete: if isValidId(teamId) && isValidId(scrimId) && (isTeamCoach(teamId) || isAdmin());
+      }
+
+      match /availabilities/{slotId} {
+        allow get: if isValidId(teamId) && isValidId(slotId) && (isTeamMember(teamId) || isAdmin());
+        allow list: if isVerifiedUser() && (resource.data.teamOwnerId == request.auth.uid || resource.data.ownerId == request.auth.uid || isAdmin());
+        allow create: if isVerifiedUser() && isValidId(teamId) && isValidId(slotId) &&
+          isValidAvailability(incoming()) &&
+          isTeamMember(teamId) &&
+          incoming().id == slotId &&
+          incoming().teamId == teamId &&
+          incoming().teamOwnerId == get(/databases/$(database)/documents/teams/$(teamId)).data.ownerId &&
+          (incoming().ownerId == request.auth.uid || isTeamCoach(teamId)) &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time;
+        allow update: if isVerifiedUser() && isValidId(teamId) && isValidId(slotId) &&
+          isValidAvailability(incoming()) &&
+          isTeamMember(teamId) &&
+          incoming().id == existing().id &&
+          incoming().teamId == existing().teamId &&
+          incoming().teamOwnerId == existing().teamOwnerId &&
+          incoming().ownerId == existing().ownerId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time && (
+            isAdmin() ||
+            ((existing().ownerId == request.auth.uid || isTeamCoach(teamId)) && incoming().diff(existing()).affectedKeys().hasOnly(['memberName', 'date', 'startTime', 'endTime', 'slotType', 'notes', 'updatedAt']))
+          );
+        allow delete: if isValidId(teamId) && isValidId(slotId) && ((isTeamMember(teamId) && existing().ownerId == request.auth.uid) || isTeamCoach(teamId) || isAdmin());
+      }
+
+      match /templates/{templateId} {
+        allow get: if isValidId(teamId) && isValidId(templateId) && (isTeamMember(teamId) || isAdmin());
+        allow list: if isVerifiedUser() && (resource.data.teamOwnerId == request.auth.uid || resource.data.ownerId == request.auth.uid || isAdmin());
+        allow create: if isVerifiedUser() && isValidId(teamId) && isValidId(templateId) &&
+          isValidTemplate(incoming()) &&
+          isTeamMember(teamId) &&
+          incoming().id == templateId &&
+          incoming().teamId == teamId &&
+          incoming().teamOwnerId == get(/databases/$(database)/documents/teams/$(teamId)).data.ownerId &&
+          incoming().ownerId == request.auth.uid &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time;
+        allow update: if isVerifiedUser() && isValidId(teamId) && isValidId(templateId) &&
+          isValidTemplate(incoming()) &&
+          isTeamMember(teamId) &&
+          incoming().id == existing().id &&
+          incoming().teamId == existing().teamId &&
+          incoming().teamOwnerId == existing().teamOwnerId &&
+          incoming().ownerId == existing().ownerId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time && (
+            isAdmin() ||
+            ((existing().ownerId == request.auth.uid || isTeamCoach(teamId)) && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'description', 'items', 'updatedAt']))
+          );
+        allow delete: if isValidId(teamId) && isValidId(templateId) && ((isTeamMember(teamId) && existing().ownerId == request.auth.uid) || isTeamCoach(teamId) || isAdmin());
+      }
+
+      match /notifications/{notifId} {
+        allow get: if isValidId(teamId) && isValidId(notifId) && (isTeamMember(teamId) || isAdmin());
+        allow list: if isVerifiedUser() && (resource.data.teamOwnerId == request.auth.uid || resource.data.actorId == request.auth.uid || isAdmin());
+        allow create: if isVerifiedUser() && isValidId(teamId) && isValidId(notifId) &&
+          isValidNotification(incoming()) &&
+          isTeamMember(teamId) &&
+          incoming().id == notifId &&
+          incoming().teamId == teamId &&
+          incoming().teamOwnerId == get(/databases/$(database)/documents/teams/$(teamId)).data.ownerId &&
+          incoming().actorId == request.auth.uid &&
+          incoming().createdAt == request.time;
+        allow update: if isVerifiedUser() && isValidId(teamId) && isValidId(notifId) &&
+          isValidNotification(incoming()) &&
+          isTeamMember(teamId) &&
+          incoming().id == existing().id &&
+          incoming().teamId == existing().teamId &&
+          incoming().teamOwnerId == existing().teamOwnerId &&
+          incoming().actorId == existing().actorId &&
+          incoming().type == existing().type &&
+          incoming().title == existing().title &&
+          incoming().message == existing().message &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['read']);
+        allow delete: if isValidId(teamId) && isValidId(notifId) && (isTeamCoach(teamId) || (isTeamMember(teamId) && existing().actorId == request.auth.uid) || isAdmin());
+      }
+    }
+  }
+}
