@@ -15,7 +15,6 @@ import { TopHeader } from './components/layout/TopHeader';
 import { AvailabilityView } from './components/views/AvailabilityView';
 import { DailyTrainingView } from './components/views/DailyTrainingView';
 import { DashboardView } from './components/views/DashboardView';
-import { PerformanceView } from './components/views/PerformanceView';
 import { ScrimScheduleView } from './components/views/ScrimScheduleView';
 import {
   TeamManagementView,
@@ -1155,22 +1154,6 @@ function AppShell() {
                   onDeleteMember={handleDeleteMember}
                   onAssignDrill={handleAssignDrill}
                   onNavigate={setActiveSection}
-                />
-              )}
-
-              {activeSection === 'performance' && (
-                <PerformanceView
-                  drills={
-                    activeRole === 'player'
-                      ? drills.filter((d) => d.ownerId === currentUserId)
-                      : drills
-                  }
-                  aimLogs={
-                    activeRole === 'player'
-                      ? aimLogs.filter((l) => l.ownerId === currentUserId)
-                      : aimLogs
-                  }
-                  scrims={scrims}
                 />
               )}
             </>

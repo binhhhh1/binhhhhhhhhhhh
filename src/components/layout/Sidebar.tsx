@@ -1,6 +1,5 @@
 import React from 'react';
 import {
-  BarChart3,
   CalendarDays,
   Clock,
   LayoutDashboard,
@@ -30,7 +29,6 @@ const NAV_ITEMS: Array<{
   { id: 'scrim-schedule', label: 'Scrim Schedule', icon: CalendarDays },
   { id: 'availability', label: 'Lịch trống', icon: Clock },
   { id: 'team-management', label: 'Quản lý đội', icon: Users },
-  { id: 'performance', label: 'Hiệu suất', icon: BarChart3 },
 ];
 
 export function Sidebar({

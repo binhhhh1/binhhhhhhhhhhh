@@ -10,7 +10,6 @@ const SECTION_TITLES: Record<NavSection, string> = {
   'scrim-schedule': 'Scrim Schedule',
   availability: 'Quản lý lịch trống',
   'team-management': 'Quản lý đội tuyển',
-  performance: 'Thống kê hiệu suất',
 };
 
 interface TopHeaderProps {

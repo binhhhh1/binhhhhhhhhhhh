@@ -452,10 +452,10 @@ export function DashboardView({
             </div>
             <button
               type="button"
-              onClick={() => onNavigate('performance')}
+              onClick={() => onNavigate('daily-training')}
               className="text-xs font-medium text-sky-400 hover:text-sky-300 flex items-center gap-1 whitespace-nowrap"
             >
-              <span>Xem báo cáo</span>
+              <span>Xem lịch tập</span>
               <ArrowUpRight className="w-3.5 h-3.5" />
             </button>
           </div>

@@ -3,8 +3,7 @@ export type NavSection =
   | 'daily-training'
   | 'scrim-schedule'
   | 'availability'
-  | 'team-management'
-  | 'performance';
+  | 'team-management';
 
 export const DRILL_CATEGORIES = [
   'Aim Training',

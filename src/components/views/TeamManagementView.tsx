@@ -958,7 +958,7 @@ export function TeamManagementView({
             <p className="text-xs text-slate-400 leading-relaxed">
               Toàn bộ tuyển thủ đều nằm trong cùng một cơ sở dữ liệu đội tuyển và chịu sự giám sát trực tiếp của Manager: từ lịch tập cá nhân, bằng chứng ảnh chụp màn hình cho đến lịch Scrim.
             </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+            <div className="grid grid-cols-1 gap-3 pt-2">
               <button
                 type="button"
                 onClick={() => onNavigate('scrim-schedule')}
@@ -981,22 +981,12 @@ export function TeamManagementView({
               </button>
               <button
                 type="button"
-                onClick={() => onNavigate('performance')}
-                className="p-4 rounded-lg bg-[#090B10] border border-white/[0.08] hover:border-white/20 text-left transition-colors"
-              >
-                <div className="text-sm font-semibold text-white">Báo cáo toàn đội</div>
-                <div className="text-xs text-slate-400 mt-1">
-                  Xem tổng giờ tập, tỷ lệ hoàn thành &amp; xuất CSV
-                </div>
-              </button>
-              <button
-                type="button"
                 onClick={() => onNavigate('daily-training')}
                 className="p-4 rounded-lg bg-[#090B10] border border-white/[0.08] hover:border-white/20 text-left transition-colors"
               >
-                <div className="text-sm font-semibold text-white">Kiểm duyệt bài tập &amp; Aim</div>
+                <div className="text-sm font-semibold text-white">Kiểm duyệt bài tập &amp; Đánh giá AI</div>
                 <div className="text-xs text-slate-400 mt-1">
-                  Kiểm tra trạng thái bài tập và duyệt ảnh bằng chứng của từng tuyển thủ
+                  Kiểm tra trạng thái bài tập, nhận xét AI và duyệt ảnh bằng chứng của từng tuyển thủ
                 </div>
               </button>
             </div>
