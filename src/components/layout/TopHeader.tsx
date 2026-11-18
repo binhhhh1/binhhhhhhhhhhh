@@ -6,7 +6,7 @@ import { getVNClockDisplay } from '../../utils/timezone';
 
 const SECTION_TITLES: Record<NavSection, string> = {
   dashboard: 'Tổng quan luyện tập',
-  'daily-training': 'Daily Training & Aim',
+  'daily-training': 'Daily Training',
   'scrim-schedule': 'Scrim Schedule',
   availability: 'Quản lý lịch trống',
   'team-management': 'Quản lý đội tuyển',

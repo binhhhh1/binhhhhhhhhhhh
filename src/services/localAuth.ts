@@ -54,6 +54,9 @@ export interface CloudHubSyncStatus {
 
 export const UNIFIED_TEAM_ID = 'team_valorant_training_hub';
 export const UNIFIED_TEAM_OWNER_ID = 'acct_manager_binh';
+export const DEFAULT_TEAM_NAME = 'FY - Five Young Esport';
+export const DEFAULT_TEAM_TAG = 'FY';
+const LEGACY_TEAM_NAMES = new Set(['Saigon Vanguard Esports', 'Saigon Vanguard', '']);
 export const CLOUD_HUB_SYNC_TOKEN = 'vth_cloud_sync_v2';
 export const ACCOUNTS_KEY = 'vth_local_accounts_v2';
 export const ACTIVE_SESSION_KEY = 'vth_active_local_session_v1';
@@ -405,8 +408,8 @@ export function buildInitialUnifiedDataset(
   return {
     team: {
       id: UNIFIED_TEAM_ID,
-      name: 'Saigon Vanguard Esports',
-      tag: 'SGV',
+      name: DEFAULT_TEAM_NAME,
+      tag: DEFAULT_TEAM_TAG,
       ownerId: UNIFIED_TEAM_OWNER_ID,
       weeklyGoalHours: 24,
       isDemo: false,
@@ -504,11 +507,19 @@ export function reconcileUnifiedDatabase(
   const playerUids = new Set(playerMembers.map((m) => m.uid));
   const fallbackPlayerUid = playerMembers[0]?.uid || UNIFIED_TEAM_OWNER_ID;
 
+  const rawTeamName = (dataset.team?.name || '').trim();
+  const isLegacyTeamName = LEGACY_TEAM_NAMES.has(rawTeamName);
+  const resolvedTeamName = isLegacyTeamName ? DEFAULT_TEAM_NAME : rawTeamName;
+  const resolvedTeamTag =
+    isLegacyTeamName || !dataset.team?.tag || dataset.team.tag === 'SGV'
+      ? DEFAULT_TEAM_TAG
+      : dataset.team.tag;
+
   return {
     team: {
       id: UNIFIED_TEAM_ID,
-      name: dataset.team?.name || 'Saigon Vanguard Esports',
-      tag: dataset.team?.tag || 'SGV',
+      name: resolvedTeamName,
+      tag: resolvedTeamTag,
       ownerId: UNIFIED_TEAM_OWNER_ID,
       weeklyGoalHours: dataset.team?.weeklyGoalHours || 24,
       isDemo: false,
@@ -913,6 +924,19 @@ export async function pullUnifiedStateFromServer(
       }
 
       const applied = applyCloudDocToStorage(cloudData, storage);
+      if (LEGACY_TEAM_NAMES.has((cloudData.team?.name || '').trim())) {
+        const nextRev = (cloudData.revision || 1) + 1;
+        await pushUnifiedStateToCloudFirestore(applied.accounts, applied.dataset, {
+          revision: nextRev,
+          isCustomized: Boolean(cloudData.isCustomized) || localIsCustom,
+          updatedAtMs: Date.now(),
+        });
+        return {
+          ...applied,
+          revision: nextRev,
+          updatedBy: 'team_rename',
+        };
+      }
       return {
         ...applied,
         revision: cloudData.revision || 1,
@@ -1019,6 +1043,13 @@ export function subscribeToUnifiedCloudHub(callbacks: {
       }
 
       const applied = applyCloudDocToStorage(cloudData, localStorage);
+      if (LEGACY_TEAM_NAMES.has((cloudData.team?.name || '').trim())) {
+        void pushUnifiedStateToCloudFirestore(applied.accounts, applied.dataset, {
+          revision: (cloudData.revision || 1) + 1,
+          isCustomized: Boolean(cloudData.isCustomized) || localIsCustom,
+          updatedAtMs: Date.now(),
+        });
+      }
       const status: CloudHubSyncStatus = {
         connected: true,
         syncing: false,

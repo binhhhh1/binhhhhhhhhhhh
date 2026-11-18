@@ -21,7 +21,6 @@ import {
   DRILL_CATEGORIES,
   type AiEvaluationRecommendedDrill,
   type AiTrainingEvaluation,
-  type AimLog,
   type DataSourceMode,
   type DrillCategory,
   type DrillStatus,
@@ -38,22 +37,16 @@ import {
   validateProofUrl,
 } from '../../utils/aimProof';
 import { formatFullVNDate, getVNDateKey } from '../../utils/timezone';
-import { AimTrainingView } from './AimTrainingView';
-
-export type DailyTrainingTab = 'drills' | 'aim';
 
 interface DailyTrainingViewProps {
   drills: TrainingDrill[];
   templates: TrainingTemplate[];
   members: TeamMember[];
-  aimLogs: AimLog[];
   activeRole: TeamRole;
   currentUserId: string;
   dataMode: DataSourceMode;
   teamId: string;
   teamOwnerId: string;
-  activeTab?: DailyTrainingTab;
-  onTabChange?: (tab: DailyTrainingTab) => void;
   aiEvaluation: AiTrainingEvaluation | null;
   aiLoading: boolean;
   aiError: string;
@@ -72,9 +65,6 @@ interface DailyTrainingViewProps {
   onDuplicateDrill: (drill: TrainingDrill) => Promise<void>;
   onApplyTemplate: (template: TrainingTemplate, targetDate: string) => Promise<void>;
   onSaveTemplate: (template: TrainingTemplate) => Promise<void>;
-  onSaveAimLog: (log: AimLog, isNew: boolean) => Promise<void>;
-  onVerifyAimProof: (logId: string, verified: boolean) => Promise<void>;
-  onDeleteAimLog: (logId: string) => Promise<void>;
 }
 
 const STATUS_META: Record<DrillStatus, { label: string; colorClass: string }> = {
@@ -88,14 +78,11 @@ export function DailyTrainingView({
   drills,
   templates,
   members,
-  aimLogs,
   activeRole,
   currentUserId,
   dataMode,
   teamId,
   teamOwnerId,
-  activeTab,
-  onTabChange,
   aiEvaluation,
   aiLoading,
   aiError,
@@ -106,17 +93,8 @@ export function DailyTrainingView({
   onDuplicateDrill,
   onApplyTemplate,
   onSaveTemplate,
-  onSaveAimLog,
-  onVerifyAimProof,
-  onDeleteAimLog,
 }: DailyTrainingViewProps) {
   const todayDate = getVNDateKey();
-  const [internalTab, setInternalTab] = useState<DailyTrainingTab>('drills');
-  const currentTab = activeTab ?? internalTab;
-  const switchTab = (tab: DailyTrainingTab) => {
-    setInternalTab(tab);
-    onTabChange?.(tab);
-  };
 
   // Player Self-Report Aim Training state for AI Evaluation
   const [reportedSummary, setReportedSummary] = useState<string>(
@@ -182,16 +160,6 @@ export function DailyTrainingView({
     }
     return drills;
   }, [drills, activeRole, currentUserId, memberFilter]);
-
-  const roleScopedAimLogs = useMemo(() => {
-    if (activeRole === 'player') {
-      return aimLogs.filter((l) => l.ownerId === currentUserId);
-    }
-    if (memberFilter !== 'ALL') {
-      return aimLogs.filter((l) => l.ownerId === memberFilter);
-    }
-    return aimLogs;
-  }, [aimLogs, activeRole, currentUserId, memberFilter]);
 
   const filteredDrills = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -586,47 +554,16 @@ export function DailyTrainingView({
 
   return (
     <div className="space-y-6">
-      {/* Merged Daily Training & Aim Training Sub-navigation */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-[#121621] border border-white/[0.07] rounded-xl p-3">
-        <div
-          role="tablist"
-          aria-label="Phân hệ Daily Training và Aim Training"
-          className="grid grid-cols-2 sm:inline-flex items-center gap-1.5 p-1 rounded-lg bg-[#090B10] border border-white/[0.07] w-full sm:w-auto sm:self-start"
-        >
-          <button
-            type="button"
-            role="tab"
-            aria-selected={currentTab === 'drills'}
-            onClick={() => switchTab('drills')}
-            className={`px-2.5 sm:px-3.5 py-2 rounded-md text-xs font-semibold flex items-center justify-center gap-1.5 sm:gap-2 transition-colors min-w-0 ${
-              currentTab === 'drills'
-                ? 'bg-[#FF4655] text-white'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <ListChecks className="w-3.5 h-3.5 shrink-0" />
-            <span className="truncate">Lịch tập hằng ngày</span>
-            <span className="font-mono text-[11px] opacity-80 shrink-0">
+      {/* Daily Training Header & Role Filter Bar */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-[#121621] border border-white/[0.07] rounded-xl p-3.5">
+        <div className="flex items-center gap-2.5 px-1">
+          <div className="px-3 py-1.5 rounded-lg bg-[#FF4655]/15 border border-[#FF4655]/35 text-xs font-semibold text-white flex items-center gap-2">
+            <ListChecks className="w-3.5 h-3.5 text-[#FF4655] shrink-0" />
+            <span>Lịch tập hằng ngày</span>
+            <span className="font-mono text-[11px] text-slate-300">
               ({roleScopedDrills.length})
             </span>
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={currentTab === 'aim'}
-            onClick={() => switchTab('aim')}
-            className={`px-2.5 sm:px-3.5 py-2 rounded-md text-xs font-semibold flex items-center justify-center gap-1.5 sm:gap-2 transition-colors min-w-0 ${
-              currentTab === 'aim'
-                ? 'bg-[#FF4655] text-white'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <Crosshair className="w-3.5 h-3.5 shrink-0" />
-            <span className="truncate">Aim &amp; Kết quả</span>
-            <span className="font-mono text-[11px] opacity-80 shrink-0">
-              ({roleScopedAimLogs.length})
-            </span>
-          </button>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5 px-1">
@@ -657,21 +594,6 @@ export function DailyTrainingView({
           </div>
         </div>
       </div>
-
-      {currentTab === 'aim' ? (
-        <AimTrainingView
-          aimLogs={roleScopedAimLogs}
-          currentUserId={currentUserId}
-          activeRole={activeRole}
-          dataMode={dataMode}
-          teamId={teamId}
-          teamOwnerId={teamOwnerId}
-          onSaveAimLog={onSaveAimLog}
-          onVerifyAimProof={onVerifyAimProof}
-          onDeleteAimLog={onDeleteAimLog}
-        />
-      ) : (
-        <>
           {/* Action Toolbar */}
           <div className="bg-[#121621] border border-white/[0.07] rounded-xl p-4 space-y-4">
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -2005,8 +1927,6 @@ export function DailyTrainingView({
             </div>
           </div>
         </div>
-      )}
-        </>
       )}
     </div>
   );

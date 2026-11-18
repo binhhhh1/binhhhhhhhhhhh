@@ -336,6 +336,8 @@ export function AuthModal({
           </div>
         </div>
         <div className="hidden sm:flex items-center gap-2 text-xs text-slate-400 font-mono">
+          <span className="text-white font-semibold">FY - Five Young Esport</span>
+          <span>·</span>
           <span className="text-emerald-400">Cloud Firestore Real-time Sync</span>
           <span>·</span>
           <span className="text-sky-400">Manager Controlled</span>
@@ -347,7 +349,7 @@ export function AuthModal({
           <div className="lg:col-span-7 space-y-6">
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#121621] border border-white/10 text-xs text-sky-400 font-medium">
               <Sparkles className="w-3.5 h-3.5 text-[#FF4655]" />
-              <span>Hệ thống Quản lý Đội tuyển, Lịch Scrim &amp; AI Đánh Giá Hiệu Quả Tập Aim</span>
+              <span>FY - Five Young Esport · Quản lý Đội tuyển, Scrim &amp; AI Đánh Giá Aim</span>
             </div>
 
             <div className="space-y-3">

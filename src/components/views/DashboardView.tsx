@@ -45,7 +45,7 @@ interface DashboardViewProps {
   activeOwnerId?: string;
   aiEvaluation?: AiTrainingEvaluation | null;
   aiLoading?: boolean;
-  onNavigate: (section: NavSection, dailyTab?: 'drills' | 'aim') => void;
+  onNavigate: (section: NavSection) => void;
   onToggleDrillComplete: (drill: TrainingDrill) => void;
 }
 
@@ -423,7 +423,7 @@ export function DashboardView({
             </div>
             <button
               type="button"
-              onClick={() => onNavigate('daily-training', 'aim')}
+              onClick={() => onNavigate('daily-training')}
               className="text-xs font-medium text-sky-400 hover:text-sky-300 flex items-center gap-1 whitespace-nowrap"
             >
               <span>Mở trong Daily Training</span>

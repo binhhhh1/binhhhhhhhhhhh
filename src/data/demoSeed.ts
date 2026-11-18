@@ -32,13 +32,13 @@ export function buildDemoDataset(todayDate: string = getVNDateKey()): HubDataset
   const tomorrow = addDaysToDateKey(todayDate, 1);
   const inTwoDays = addDaysToDateKey(todayDate, 2);
 
-  const teamId = 'demo_team_saigon_vanguard';
+  const teamId = 'demo_team_fy_esport';
   const ownerId = 'demo_coach_minh';
 
   const team: TeamWorkspace = {
     id: teamId,
-    name: 'Saigon Vanguard',
-    tag: 'SGV',
+    name: 'FY - Five Young Esport',
+    tag: 'FY',
     ownerId,
     weeklyGoalHours: 24,
     isDemo: true,

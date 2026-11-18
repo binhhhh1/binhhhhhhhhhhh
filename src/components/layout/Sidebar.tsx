@@ -65,7 +65,7 @@ export function Sidebar({
               VALORANT HUB
             </div>
             <div className="text-[11px] text-slate-400 truncate">
-              {team.tag} · {team.name}
+              {team.name.startsWith(team.tag) ? team.name : `${team.tag} · ${team.name}`}
             </div>
           </div>
         </div>

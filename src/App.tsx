@@ -13,7 +13,7 @@ import { NotificationDrawer } from './components/layout/NotificationDrawer';
 import { Sidebar } from './components/layout/Sidebar';
 import { TopHeader } from './components/layout/TopHeader';
 import { AvailabilityView } from './components/views/AvailabilityView';
-import { DailyTrainingView, type DailyTrainingTab } from './components/views/DailyTrainingView';
+import { DailyTrainingView } from './components/views/DailyTrainingView';
 import { DashboardView } from './components/views/DashboardView';
 import { PerformanceView } from './components/views/PerformanceView';
 import { ScrimScheduleView } from './components/views/ScrimScheduleView';
@@ -92,15 +92,11 @@ import { getVNDateKey, getVNTimeStr } from './utils/timezone';
 
 function AppShell() {
   const [activeSection, setActiveSection] = useState<NavSection>('dashboard');
-  const [dailyTab, setDailyTab] = useState<DailyTrainingTab>('drills');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
 
-  const handleNavigate = (section: NavSection, subTab?: DailyTrainingTab) => {
+  const handleNavigate = (section: NavSection) => {
     setActiveSection(section);
-    if (section === 'daily-training' && subTab) {
-      setDailyTab(subTab);
-    }
   };
 
   const [initialLocal] = useState(() => getActiveLocalSession());
@@ -1078,14 +1074,11 @@ function AppShell() {
                   drills={drills}
                   templates={templates}
                   members={members}
-                  aimLogs={aimLogs}
                   activeRole={activeRole}
                   currentUserId={currentUserId}
                   dataMode={dataMode}
                   teamId={team.id}
                   teamOwnerId={team.ownerId}
-                  activeTab={dailyTab}
-                  onTabChange={setDailyTab}
                   aiEvaluation={aiEvaluation}
                   aiLoading={aiLoading}
                   aiError={aiError}
@@ -1096,9 +1089,6 @@ function AppShell() {
                   onDuplicateDrill={handleDuplicateDrill}
                   onApplyTemplate={handleApplyTemplate}
                   onSaveTemplate={handleSaveTemplate}
-                  onSaveAimLog={handleSaveAimLog}
-                  onVerifyAimProof={handleVerifyAimProof}
-                  onDeleteAimLog={handleDeleteAimLog}
                 />
               )}
 
