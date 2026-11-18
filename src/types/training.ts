@@ -102,6 +102,7 @@ export interface TrainingDrill {
   notes?: string;
   proofUrl?: string;
   proofImageDataUrl?: string;
+  proofUploadedAt?: string;
   proofNote?: string;
   proofVerified?: boolean;
   isDemo?: boolean;
@@ -126,6 +127,7 @@ export interface AimLog {
   notes?: string;
   proofUrl?: string;
   proofImageDataUrl?: string;
+  proofUploadedAt?: string;
   proofType?: AimProofType;
   proofNote?: string;
   proofVerified?: boolean;
@@ -270,4 +272,44 @@ export interface AiDailyPlan {
   generatedAt: string;
   drills: GeneratedDailyDrill[];
 }
+
+export type EffectivenessLevel =
+  | 'Xuất sắc'
+  | 'Hiệu quả cao'
+  | 'Đạt yêu cầu'
+  | 'Cần cải thiện';
+
+export interface AiEvaluationRecommendedDrill {
+  id: string;
+  title: string;
+  category: DrillCategory;
+  focusTag: string;
+  startTime: string;
+  durationMin: number;
+  goal: string;
+  description: string;
+}
+
+export interface AiTrainingEvaluation {
+  id: string;
+  date: string;
+  ownerId: string;
+  playerName: string;
+  gameRole: string;
+  mainAgent: string;
+  reportedSummary: string;
+  durationMin: number;
+  scoreOrResult: string;
+  accuracyPct: number;
+  headshotPct: number;
+  effectivenessScore: number;
+  effectivenessLevel: EffectivenessLevel;
+  overallFeedback: string;
+  strengths: string[];
+  weaknesses: string[];
+  whatToPracticeNext: string[];
+  recommendedDrills: AiEvaluationRecommendedDrill[];
+  evaluatedAt: string;
+}
+
 

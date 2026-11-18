@@ -621,13 +621,51 @@ export function TeamManagementView({
         </div>
       )}
 
-      {/* Team Roster Table */}
+      {/* Ban Huấn Luyện / Manager Oversight Bar (Consistent across all accounts) */}
+      <div className="bg-[#121621] border border-white/[0.07] rounded-xl p-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+          <div className="flex items-center gap-2 text-xs font-semibold text-white">
+            <Shield className="w-4 h-4 text-[#FF4655]" />
+            <span>
+              Ban Huấn Luyện &amp; Quản Lý Đội ({managerMembers.length} Manager / Admin — Chỉ quản lý &amp; giao nhiệm vụ, không tính vào lịch trống Scrim)
+            </span>
+          </div>
+          <span className="text-[11px] text-slate-400">
+            Đồng nhất 100% trên mọi tài khoản trong đội
+          </span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {managerMembers.map((mgr) => (
+            <div
+              key={mgr.uid}
+              className="p-3 rounded-lg bg-[#090B10] border border-white/[0.07] flex items-center justify-between gap-3"
+            >
+              <div>
+                <div className="text-xs font-semibold text-white flex items-center gap-1.5">
+                  <span>{mgr.displayName}</span>
+                  <span className="px-1.5 py-0.5 rounded bg-[#FF4655]/15 border border-[#FF4655]/30 text-[10px] text-[#FF4655] font-mono">
+                    @{mgr.username || mgr.uid}
+                  </span>
+                </div>
+                <div className="text-[11px] text-slate-400 font-mono mt-0.5">
+                  {mgr.riotId} · Quyền điều phối &amp; giao bài tập toàn đội
+                </div>
+              </div>
+              <span className="text-[11px] font-semibold text-emerald-400 shrink-0">
+                Manager / Coach
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Competing Players Roster Table */}
       <div className="bg-[#121621] border border-white/[0.07] rounded-xl p-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
           <h3 className="font-display font-semibold text-base text-white flex items-center gap-2">
             <Users className="w-4 h-4 text-sky-400" />
             <span>
-              Danh sách Tuyển thủ trực thuộc Manager &amp; Tiến độ tuần ({members.length})
+              Danh sách Tuyển thủ Thi đấu trực thuộc Manager &amp; Tiến độ tuần ({playerMembers.length} Tuyển thủ)
             </span>
           </h3>
           <button
@@ -635,7 +673,7 @@ export function TeamManagementView({
             onClick={() => onNavigate('availability')}
             className="text-xs font-medium text-sky-400 hover:text-sky-300 self-start sm:self-auto"
           >
-            Xem lịch trống từng thành viên
+            Xem lịch trống từng tuyển thủ
           </button>
         </div>
 
@@ -643,13 +681,13 @@ export function TeamManagementView({
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="border-b border-white/[0.08] text-slate-400">
-                <th className="py-2.5 pr-4 font-medium">Thành viên / Riot ID</th>
+                <th className="py-2.5 pr-4 font-medium">Tuyển thủ / Riot ID</th>
                 <th className="py-2.5 pr-4 font-medium">Tài khoản</th>
                 <th className="py-2.5 pr-4 font-medium">Quyền &amp; Quản lý</th>
                 <th className="py-2.5 pr-4 font-medium">Role &amp; Agent</th>
                 <th className="py-2.5 pr-4 text-right font-medium">Giờ tập tuần</th>
                 <th className="py-2.5 pr-4 text-right font-medium">Bài tập xong</th>
-                <th className="py-2.5 pr-4 text-right font-medium">Khung giờ rảnh</th>
+                <th className="py-2.5 pr-4 text-right font-medium">Khung giờ rảnh Scrim</th>
                 <th className={`py-2.5 ${canManageRoster ? 'pr-4' : ''} text-right font-medium`}>
                   Trạng thái Scrim
                 </th>
@@ -659,7 +697,7 @@ export function TeamManagementView({
               </tr>
             </thead>
             <tbody className="divide-y divide-white/[0.05]">
-              {members.map((m) => {
+              {playerMembers.map((m) => {
                 const mDrills = drills.filter(
                   (d) => d.ownerId === m.uid && weekSet.has(d.date),
                 );
@@ -675,7 +713,6 @@ export function TeamManagementView({
                   (a) => a.ownerId === m.uid && a.slotType === 'available',
                 ).length;
                 const statusMeta = SCRIM_STATUS_LABEL[m.scrimStatus];
-                // Manager controls all players' statuses; player cannot override Manager roster controls
                 const canChangeStatus = canManageRoster;
                 const canDeleteThisMember =
                   canManageRoster &&
@@ -694,19 +731,12 @@ export function TeamManagementView({
                       {m.username ? `@${m.username}` : m.uid.slice(0, 10)}
                     </td>
                     <td className="py-3 pr-4">
-                      {m.teamRole === 'coach' ? (
-                        <span className="inline-flex items-center gap-1 text-[#FF4655] font-semibold">
-                          <Shield className="w-3 h-3" />
-                          <span>Manager / Coach</span>
-                        </span>
-                      ) : (
-                        <div>
-                          <div className="text-sky-400 font-medium">Tuyển thủ (Player)</div>
-                          <div className="text-[11px] text-slate-400">
-                            Quản lý bởi: {m.managedByName || 'Manager Binh'}
-                          </div>
+                      <div>
+                        <div className="text-sky-400 font-medium">Tuyển thủ (Player)</div>
+                        <div className="text-[11px] text-slate-400">
+                          Quản lý bởi: {m.managedByName || 'Manager Binh'}
                         </div>
-                      )}
+                      </div>
                     </td>
                     <td className="py-3 pr-4 text-slate-200">
                       {m.gameRole} · {m.mainAgent}
@@ -743,53 +773,49 @@ export function TeamManagementView({
                     </td>
                     {canManageRoster && (
                       <td className="py-3 text-right whitespace-nowrap">
-                        {m.teamRole === 'player' ? (
-                          isConfirmingDelete ? (
-                            <div className="inline-flex items-center gap-1.5">
-                              <button
-                                type="button"
-                                disabled={rosterBusy}
-                                onClick={() => void handleConfirmDeleteMember(m.uid)}
-                                className="px-2 py-1 rounded bg-[#FF4655] hover:bg-[#e53c4a] text-white text-[11px] font-semibold"
-                              >
-                                Xác nhận xóa
-                              </button>
-                              <button
-                                type="button"
-                                disabled={rosterBusy}
-                                onClick={() => setConfirmDeleteUid(null)}
-                                className="px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-slate-300 text-[11px]"
-                              >
-                                Hủy
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="inline-flex items-center gap-1">
-                              <button
-                                type="button"
-                                onClick={() => openEditPlayerModal(m)}
-                                aria-label={`Chỉnh sửa tuyển thủ ${m.displayName}`}
-                                title="Sửa hồ sơ & Đặt lại mật khẩu"
-                                className="px-2 py-1 rounded-md bg-white/[0.05] hover:bg-white/[0.12] text-slate-200 text-[11px] inline-flex items-center gap-1 transition-colors"
-                              >
-                                <Edit3 className="w-3 h-3 text-sky-400" />
-                                <span>Sửa / MK</span>
-                              </button>
-                              {canDeleteThisMember && (
-                                <button
-                                  type="button"
-                                  onClick={() => setConfirmDeleteUid(m.uid)}
-                                  aria-label={`Xóa player ${m.displayName}`}
-                                  title="Xóa tuyển thủ"
-                                  className="p-1.5 rounded-lg text-slate-400 hover:text-[#FF4655] hover:bg-white/5 transition-colors inline-flex items-center"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              )}
-                            </div>
-                          )
+                        {isConfirmingDelete ? (
+                          <div className="inline-flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              disabled={rosterBusy}
+                              onClick={() => void handleConfirmDeleteMember(m.uid)}
+                              className="px-2 py-1 rounded bg-[#FF4655] hover:bg-[#e53c4a] text-white text-[11px] font-semibold"
+                            >
+                              Xác nhận xóa
+                            </button>
+                            <button
+                              type="button"
+                              disabled={rosterBusy}
+                              onClick={() => setConfirmDeleteUid(null)}
+                              className="px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-slate-300 text-[11px]"
+                            >
+                              Hủy
+                            </button>
+                          </div>
                         ) : (
-                          <span className="text-[11px] text-slate-500">Ban Huấn Luyện</span>
+                          <div className="inline-flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => openEditPlayerModal(m)}
+                              aria-label={`Chỉnh sửa tuyển thủ ${m.displayName}`}
+                              title="Sửa hồ sơ & Đặt lại mật khẩu"
+                              className="px-2 py-1 rounded-md bg-white/[0.05] hover:bg-white/[0.12] text-slate-200 text-[11px] inline-flex items-center gap-1 transition-colors"
+                            >
+                              <Edit3 className="w-3 h-3 text-sky-400" />
+                              <span>Sửa / MK</span>
+                            </button>
+                            {canDeleteThisMember && (
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDeleteUid(m.uid)}
+                                aria-label={`Xóa player ${m.displayName}`}
+                                title="Xóa tuyển thủ"
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-[#FF4655] hover:bg-white/5 transition-colors inline-flex items-center"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
                         )}
                       </td>
                     )}

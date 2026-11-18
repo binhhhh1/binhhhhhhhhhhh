@@ -80,30 +80,47 @@ export function AvailabilityView({
   } | null>(null);
   const [draftOpponent, setDraftOpponent] = useState('');
 
-  const effectiveMembers: TeamMember[] = useMemo(() => {
-    if (members.length > 0) return members;
-    return [
-      {
-        uid: currentUserId,
-        teamOwnerId,
-        displayName: currentMemberName,
-        riotId: currentMemberName,
-        teamRole: activeRole,
-        gameRole: 'Flex',
-        mainAgent: 'Omen',
-        scrimStatus: 'ready',
-      },
-    ];
+  const playerMembers: TeamMember[] = useMemo(() => {
+    const players = members.filter((m) => m.teamRole === 'player');
+    if (players.length > 0) return players;
+    if (activeRole === 'player') {
+      return [
+        {
+          uid: currentUserId,
+          teamOwnerId,
+          displayName: currentMemberName,
+          riotId: currentMemberName,
+          teamRole: 'player',
+          gameRole: 'Flex',
+          mainAgent: 'Omen',
+          scrimStatus: 'ready',
+        },
+      ];
+    }
+    return [];
   }, [members, currentUserId, teamOwnerId, currentMemberName, activeRole]);
+
+  const playerUidSet = useMemo(
+    () => new Set(playerMembers.map((m) => m.uid)),
+    [playerMembers],
+  );
+
+  const playerAvailabilities = useMemo(
+    () =>
+      availabilities.filter(
+        (a) => playerUidSet.size === 0 || playerUidSet.has(a.ownerId),
+      ),
+    [availabilities, playerUidSet],
+  );
 
   const analysis = useMemo(
     () =>
       computeTeamAvailabilityOverlap({
-        members: effectiveMembers,
-        availabilities,
+        members: playerMembers,
+        availabilities: playerAvailabilities,
         date: selectedDate,
       }),
-    [effectiveMembers, availabilities, selectedDate],
+    [playerMembers, playerAvailabilities, selectedDate],
   );
 
   const weekKeys = getWeekDateKeys(selectedDate);
@@ -112,13 +129,14 @@ export function AvailabilityView({
 
   const dayUserSlots = useMemo(
     () =>
-      availabilities
+      playerAvailabilities
         .filter((a) => a.date === selectedDate)
         .sort((a, b) => a.startTime.localeCompare(b.startTime)),
-    [availabilities, selectedDate],
+    [playerAvailabilities, selectedDate],
   );
 
   const startEditSlot = (slot: AvailabilitySlot) => {
+    if (activeRole !== 'player') return;
     setEditingSlot(slot);
     setSlotOwnerId(slot.ownerId);
     setSlotDate(slot.date);
@@ -142,6 +160,7 @@ export function AvailabilityView({
 
   const handleSubmitSlot = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (activeRole !== 'player') return;
     if (timeToMinutes(endTime) <= timeToMinutes(startTime)) {
       setError('Giờ kết thúc phải lớn hơn giờ bắt đầu.');
       return;
@@ -149,8 +168,8 @@ export function AvailabilityView({
     setError('');
     setSaving(true);
     try {
-      const targetOwner = activeRole === 'coach' ? slotOwnerId : currentUserId;
-      const memberObj = effectiveMembers.find((m) => m.uid === targetOwner);
+      const targetOwner = currentUserId;
+      const memberObj = playerMembers.find((m) => m.uid === targetOwner);
       const payload: AvailabilitySlot = {
         id: editingSlot ? editingSlot.id : `avail_${Date.now()}`,
         teamId,
@@ -177,7 +196,7 @@ export function AvailabilityView({
     <div className="space-y-6">
       {/* Top Controls + Mini Calendar */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left: Registration Form & Month Calendar */}
+        {/* Left: Month Calendar + (Player Registration Form OR Manager Roster Availability Status) */}
         <div className="lg:col-span-4 space-y-5">
           {/* Calendar Picker */}
           <div className="bg-[#121621] border border-white/[0.07] rounded-xl p-4">
@@ -215,7 +234,7 @@ export function AvailabilityView({
             <div className="grid grid-cols-7 gap-1">
               {monthCells.map((cell) => {
                 const isSelected = cell.dateKey === selectedDate;
-                const count = availabilities.filter(
+                const count = playerAvailabilities.filter(
                   (a) => a.date === cell.dateKey && a.slotType === 'available',
                 ).length;
                 return (
@@ -244,147 +263,184 @@ export function AvailabilityView({
             </div>
           </div>
 
-          {/* Add / Edit Slot Form */}
-          <form
-            onSubmit={handleSubmitSlot}
-            className="bg-[#121621] border border-white/[0.07] rounded-xl p-5 space-y-3.5"
-          >
-            <div className="flex items-center justify-between">
-              <h3 className="font-display font-semibold text-sm text-white flex items-center gap-2">
-                <Clock className="w-4 h-4 text-sky-400" />
-                <span>{editingSlot ? 'Sửa khung giờ' : 'Đăng ký lịch rảnh / bận'}</span>
-              </h3>
-              {editingSlot && (
-                <button
-                  type="button"
-                  onClick={resetForm}
-                  className="text-xs text-slate-400 hover:text-white"
-                >
-                  Hủy sửa
-                </button>
-              )}
-            </div>
-
-            {error && (
-              <div className="p-2.5 rounded-lg bg-[#FF4655]/15 border border-[#FF4655]/40 text-xs text-red-200">
-                {error}
-              </div>
-            )}
-
-            {activeRole === 'coach' && effectiveMembers.length > 1 && (
-              <div>
-                <label htmlFor="av-member" className="block text-xs font-medium text-slate-300 mb-1">
-                  Thành viên
-                </label>
-                <select
-                  id="av-member"
-                  value={slotOwnerId}
-                  onChange={(e) => setSlotOwnerId(e.target.value)}
-                  className="w-full bg-[#090B10] border border-white/10 rounded-lg px-3 py-2 text-xs text-white"
-                >
-                  {effectiveMembers.map((m) => (
-                    <option key={m.uid} value={m.uid}>
-                      {m.displayName} ({m.gameRole})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            <div>
-              <label htmlFor="av-date" className="block text-xs font-medium text-slate-300 mb-1">
-                Ngày
-              </label>
-              <input
-                id="av-date"
-                type="date"
-                required
-                value={slotDate}
-                onChange={(e) => setSlotDate(e.target.value)}
-                className="w-full bg-[#090B10] border border-white/10 rounded-lg px-3 py-2 text-xs text-white font-mono"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label htmlFor="av-start" className="block text-xs font-medium text-slate-300 mb-1">
-                  Từ giờ
-                </label>
-                <input
-                  id="av-start"
-                  type="time"
-                  required
-                  value={startTime}
-                  onChange={(e) => setStartTime(e.target.value)}
-                  className="w-full bg-[#090B10] border border-white/10 rounded-lg px-3 py-2 text-xs text-white font-mono"
-                />
-              </div>
-              <div>
-                <label htmlFor="av-end" className="block text-xs font-medium text-slate-300 mb-1">
-                  Đến giờ
-                </label>
-                <input
-                  id="av-end"
-                  type="time"
-                  required
-                  value={endTime}
-                  onChange={(e) => setEndTime(e.target.value)}
-                  className="w-full bg-[#090B10] border border-white/10 rounded-lg px-3 py-2 text-xs text-white font-mono"
-                />
-              </div>
-            </div>
-
-            <div>
-              <div className="text-xs font-medium text-slate-300 mb-1.5">Loại khung giờ</div>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setSlotType('available')}
-                  className={`py-2 rounded-lg text-xs font-medium border transition-colors ${
-                    slotType === 'available'
-                      ? 'bg-emerald-500/20 border-emerald-400/60 text-emerald-300'
-                      : 'bg-[#090B10] border-white/10 text-slate-400'
-                  }`}
-                >
-                  Có thể Scrim (Rảnh)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSlotType('busy')}
-                  className={`py-2 rounded-lg text-xs font-medium border transition-colors ${
-                    slotType === 'busy'
-                      ? 'bg-[#FF4655]/20 border-[#FF4655]/60 text-red-200'
-                      : 'bg-[#090B10] border-white/10 text-slate-400'
-                  }`}
-                >
-                  Đánh dấu bận
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <label htmlFor="av-notes" className="block text-xs font-medium text-slate-300 mb-1">
-                Ghi chú cá nhân
-              </label>
-              <input
-                id="av-notes"
-                type="text"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="VD: Sẵn sàng BO3 hoặc bận lịch học..."
-                className="w-full bg-[#090B10] border border-white/10 rounded-lg px-3 py-2 text-xs text-white"
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={saving}
-              className="w-full py-2.5 rounded-lg bg-[#FF4655] hover:bg-[#e53c4a] disabled:opacity-60 text-white text-xs font-semibold flex items-center justify-center gap-1.5"
+          {activeRole === 'player' ? (
+            /* Player Only: Add / Edit Personal Availability Form */
+            <form
+              onSubmit={handleSubmitSlot}
+              className="bg-[#121621] border border-white/[0.07] rounded-xl p-5 space-y-3.5"
             >
-              <Plus className="w-4 h-4" />
-              <span>{saving ? 'Đang lưu...' : editingSlot ? 'Cập nhật khung giờ' : 'Thêm khung giờ'}</span>
-            </button>
-          </form>
+              <div className="flex items-center justify-between">
+                <h3 className="font-display font-semibold text-sm text-white flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-sky-400" />
+                  <span>{editingSlot ? 'Sửa khung giờ' : 'Đăng ký lịch rảnh / bận Scrim'}</span>
+                </h3>
+                {editingSlot && (
+                  <button
+                    type="button"
+                    onClick={resetForm}
+                    className="text-xs text-slate-400 hover:text-white"
+                  >
+                    Hủy sửa
+                  </button>
+                )}
+              </div>
+
+              {error && (
+                <div className="p-2.5 rounded-lg bg-[#FF4655]/15 border border-[#FF4655]/40 text-xs text-red-200">
+                  {error}
+                </div>
+              )}
+
+              <div>
+                <label htmlFor="av-date" className="block text-xs font-medium text-slate-300 mb-1">
+                  Ngày
+                </label>
+                <input
+                  id="av-date"
+                  type="date"
+                  required
+                  value={slotDate}
+                  onChange={(e) => setSlotDate(e.target.value)}
+                  className="w-full bg-[#090B10] border border-white/10 rounded-lg px-3 py-2 text-xs text-white font-mono"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label htmlFor="av-start" className="block text-xs font-medium text-slate-300 mb-1">
+                    Từ giờ
+                  </label>
+                  <input
+                    id="av-start"
+                    type="time"
+                    required
+                    value={startTime}
+                    onChange={(e) => setStartTime(e.target.value)}
+                    className="w-full bg-[#090B10] border border-white/10 rounded-lg px-3 py-2 text-xs text-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="av-end" className="block text-xs font-medium text-slate-300 mb-1">
+                    Đến giờ
+                  </label>
+                  <input
+                    id="av-end"
+                    type="time"
+                    required
+                    value={endTime}
+                    onChange={(e) => setEndTime(e.target.value)}
+                    className="w-full bg-[#090B10] border border-white/10 rounded-lg px-3 py-2 text-xs text-white font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <div className="text-xs font-medium text-slate-300 mb-1.5">Loại khung giờ</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSlotType('available')}
+                    className={`py-2 rounded-lg text-xs font-medium border transition-colors ${
+                      slotType === 'available'
+                        ? 'bg-emerald-500/20 border-emerald-400/60 text-emerald-300'
+                        : 'bg-[#090B10] border-white/10 text-slate-400'
+                    }`}
+                  >
+                    Có thể Scrim (Rảnh)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSlotType('busy')}
+                    className={`py-2 rounded-lg text-xs font-medium border transition-colors ${
+                      slotType === 'busy'
+                        ? 'bg-[#FF4655]/20 border-[#FF4655]/60 text-red-200'
+                        : 'bg-[#090B10] border-white/10 text-slate-400'
+                    }`}
+                  >
+                    Đánh dấu bận
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="av-notes" className="block text-xs font-medium text-slate-300 mb-1">
+                  Ghi chú cá nhân
+                </label>
+                <input
+                  id="av-notes"
+                  type="text"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="VD: Sẵn sàng BO3 hoặc bận lịch học..."
+                  className="w-full bg-[#090B10] border border-white/10 rounded-lg px-3 py-2 text-xs text-white"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={saving}
+                className="w-full py-2.5 rounded-lg bg-[#FF4655] hover:bg-[#e53c4a] disabled:opacity-60 text-white text-xs font-semibold flex items-center justify-center gap-1.5"
+              >
+                <Plus className="w-4 h-4" />
+                <span>
+                  {saving ? 'Đang lưu...' : editingSlot ? 'Cập nhật khung giờ' : 'Thêm khung giờ'}
+                </span>
+              </button>
+            </form>
+          ) : (
+            /* Manager / Admin Only: Roster Availability Oversight Card (No personal availability form) */
+            <div className="bg-[#121621] border border-white/[0.07] rounded-xl p-5 space-y-3.5">
+              <div>
+                <div className="text-xs font-semibold text-[#FF4655] uppercase tracking-wider">
+                  Quyền Manager / Admin
+                </div>
+                <h3 className="font-display font-semibold text-sm text-white mt-0.5">
+                  Giám sát lịch trống Scrim của Tuyển thủ
+                </h3>
+                <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                  Tài khoản Manager / Admin chỉ quản lý đội hình, giao nhiệm vụ và chốt lịch Scrim — không điền lịch trống Scrim cá nhân.
+                </p>
+              </div>
+
+              <div className="pt-2 border-t border-white/[0.06] space-y-2">
+                <div className="text-xs font-medium text-slate-300">
+                  Trạng thái khai báo ngày {formatFullVNDate(selectedDate)} ({playerMembers.length} Tuyển thủ):
+                </div>
+                <div className="space-y-1.5">
+                  {playerMembers.map((pm) => {
+                    const pmSlots = dayUserSlots.filter((s) => s.ownerId === pm.uid);
+                    const hasAvail = pmSlots.some((s) => s.slotType === 'available');
+                    return (
+                      <div
+                        key={pm.uid}
+                        className="p-2.5 rounded-lg bg-[#090B10] border border-white/[0.06] flex items-center justify-between gap-2 text-xs"
+                      >
+                        <div className="min-w-0">
+                          <div className="font-medium text-white truncate">{pm.displayName}</div>
+                          <div className="text-[11px] text-slate-400 font-mono truncate">
+                            {pm.riotId} · {pm.gameRole}
+                          </div>
+                        </div>
+                        <span
+                          className={`px-2 py-0.5 rounded font-mono text-[11px] shrink-0 ${
+                            hasAvail
+                              ? 'bg-emerald-500/15 text-emerald-400'
+                              : pmSlots.length > 0
+                              ? 'bg-[#FF4655]/15 text-red-300'
+                              : 'bg-white/[0.05] text-slate-400'
+                          }`}
+                        >
+                          {pmSlots.length > 0
+                            ? pmSlots.map((s) => `${s.startTime}-${s.endTime}`).join(', ')
+                            : 'Chưa khai báo'}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Right: Team Overlap Finder + Day/Week Matrix */}
@@ -416,15 +472,14 @@ export function AvailabilityView({
                   </span>
                 </h2>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Tự động tìm khung giờ tất cả thành viên đều rảnh trên cơ sở dữ liệu đội tuyển. Luôn cần Manager xác nhận thủ công.
+                  Tự động đối chiếu lịch trống của {playerMembers.length} Tuyển thủ (Player) trong đội. Luôn cần Manager xác nhận thủ công.
                 </p>
               </div>
             </div>
 
             {analysis.recommendedWindows.length === 0 ? (
               <div className="p-4 rounded-lg bg-[#090B10] border border-dashed border-white/10 text-xs text-slate-400">
-                Chưa tìm thấy khung giờ chung (&ge; 60 phút) trong ngày này. Hãy đăng ký thêm khung
-                giờ rảnh của các thành viên.
+                Chưa tìm thấy khung giờ chung (&ge; 60 phút) trong ngày này. Các tuyển thủ vui lòng đăng ký thêm khung giờ rảnh.
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -444,7 +499,7 @@ export function AvailabilityView({
                             win.allAvailable ? 'text-emerald-400 font-medium' : 'text-amber-400'
                           }
                         >
-                          {win.minAvailableCount}/{win.totalMembers} rảnh
+                          {win.minAvailableCount}/{win.totalMembers} tuyển thủ rảnh
                         </span>
                       </div>
                     </div>
@@ -563,7 +618,7 @@ export function AvailabilityView({
               {/* Member Slots List for Selected Date */}
               <div className="pt-4 border-t border-white/[0.06]">
                 <h4 className="text-xs font-semibold text-slate-300 mb-3">
-                  Các khung giờ đã đăng ký trong ngày ({dayUserSlots.length})
+                  Các khung giờ Tuyển thủ đã đăng ký trong ngày ({dayUserSlots.length})
                 </h4>
                 {dayUserSlots.length === 0 ? (
                   <p className="text-xs text-slate-400 py-4 text-center">
@@ -572,7 +627,10 @@ export function AvailabilityView({
                 ) : (
                   <div className="divide-y divide-white/[0.06]">
                     {dayUserSlots.map((slot) => {
-                      const canEdit = activeRole === 'coach' || slot.ownerId === currentUserId;
+                      const canEditSlot =
+                        activeRole === 'player' && slot.ownerId === currentUserId;
+                      const canDeleteSlot =
+                        activeRole === 'coach' || slot.ownerId === currentUserId;
                       return (
                         <div
                           key={slot.id}
@@ -601,24 +659,28 @@ export function AvailabilityView({
                             )}
                           </div>
 
-                          {canEdit && (
+                          {(canEditSlot || canDeleteSlot) && (
                             <div className="flex items-center gap-1 shrink-0">
-                              <button
-                                type="button"
-                                onClick={() => startEditSlot(slot)}
-                                aria-label={`Sửa khung giờ của ${slot.memberName}`}
-                                className="p-1.5 rounded-md text-slate-400 hover:text-white hover:bg-white/5"
-                              >
-                                <Edit3 className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => onDeleteAvailability(slot.id)}
-                                aria-label={`Xóa khung giờ ${slot.startTime} của ${slot.memberName}`}
-                                className="p-1.5 rounded-md text-slate-400 hover:text-[#FF4655] hover:bg-white/5"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                              {canEditSlot && (
+                                <button
+                                  type="button"
+                                  onClick={() => startEditSlot(slot)}
+                                  aria-label={`Sửa khung giờ của ${slot.memberName}`}
+                                  className="p-1.5 rounded-md text-slate-400 hover:text-white hover:bg-white/5"
+                                >
+                                  <Edit3 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                              {canDeleteSlot && (
+                                <button
+                                  type="button"
+                                  onClick={() => onDeleteAvailability(slot.id)}
+                                  aria-label={`Xóa khung giờ ${slot.startTime} của ${slot.memberName}`}
+                                  className="p-1.5 rounded-md text-slate-400 hover:text-[#FF4655] hover:bg-white/5"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
                             </div>
                           )}
                         </div>
@@ -637,8 +699,8 @@ export function AvailabilityView({
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                 {weekKeys.map((dk) => {
                   const dayAnalysis = computeTeamAvailabilityOverlap({
-                    members: effectiveMembers,
-                    availabilities,
+                    members: playerMembers,
+                    availabilities: playerAvailabilities,
                     date: dk,
                   });
                   const best = dayAnalysis.allFreeWindows[0];

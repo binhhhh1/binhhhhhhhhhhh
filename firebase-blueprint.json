@@ -192,6 +192,60 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "teamId", "actorId", "type", "title", "message", "read", "createdAt"]
+    },
+    "HubWorkspace": {
+      "title": "HubWorkspace",
+      "description": "Real-time cross-device unified team database state synchronized across all browsers and computers.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "syncToken": { "type": "string", "minLength": 8, "maxLength": 64 },
+        "revision": { "type": "number" },
+        "isCustomized": { "type": "boolean" },
+        "updatedAtMs": { "type": "number" },
+        "updatedBy": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "team": { "type": "object" },
+        "accounts": { "type": "array" },
+        "members": { "type": "array" },
+        "drills": { "type": "array" },
+        "aimLogs": { "type": "array" },
+        "scrims": { "type": "array" },
+        "availabilities": { "type": "array" },
+        "templates": { "type": "array" },
+        "notifications": { "type": "array" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id",
+        "syncToken",
+        "revision",
+        "isCustomized",
+        "updatedAtMs",
+        "updatedBy",
+        "team",
+        "accounts",
+        "members",
+        "drills",
+        "aimLogs",
+        "scrims",
+        "availabilities",
+        "templates",
+        "notifications",
+        "updatedAt"
+      ]
+    },
+    "HubProof": {
+      "title": "HubProof",
+      "description": "Compressed screenshot proof image synchronized across devices for a drill or aim log.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "workspaceId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "syncToken": { "type": "string", "minLength": 8, "maxLength": 64 },
+        "dataUrl": { "type": "string", "minLength": 10, "maxLength": 750000 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "workspaceId", "syncToken", "dataUrl", "updatedAt"]
     }
   },
   "firestore": {
@@ -230,6 +284,14 @@
     "/teams/{teamId}/notifications/{notifId}": {
       "schema": { "$ref": "#/entities/TeamNotification" },
       "description": "Team schedule and training alerts."
+    },
+    "/hubWorkspaces/{workspaceId}": {
+      "schema": { "$ref": "#/entities/HubWorkspace" },
+      "description": "Unified cross-browser and cross-computer real-time team database state."
+    },
+    "/hubWorkspaces/{workspaceId}/proofs/{proofId}": {
+      "schema": { "$ref": "#/entities/HubProof" },
+      "description": "Synchronized screenshot proof images for training drills and aim logs."
     }
   }
 }

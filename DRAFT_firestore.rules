@@ -55,11 +55,6 @@ service cloud.firestore {
       return exists(/databases/$(database)/documents/teams/$(teamId));
     }
 
-    function isTeamOwner(teamId) {
-      return isVerifiedUser() && teamExists(teamId) &&
-        get(/databases/$(database)/documents/teams/$(teamId)).data.ownerId == request.auth.uid;
-    }
-
     function isTeamMember(teamId) {
       return isVerifiedUser() && teamExists(teamId) && (
         get(/databases/$(database)/documents/teams/$(teamId)).data.ownerId == request.auth.uid ||
@@ -121,7 +116,7 @@ service cloud.firestore {
 
     function isValidDrill(data) {
       return data.keys().hasAll(['id', 'teamId', 'teamOwnerId', 'ownerId', 'assignedBy', 'title', 'category', 'date', 'startTime', 'durationMin', 'status', 'createdAt', 'updatedAt']) &&
-        data.keys().hasOnly(['id', 'teamId', 'teamOwnerId', 'ownerId', 'assignedBy', 'title', 'category', 'date', 'startTime', 'durationMin', 'goal', 'description', 'status', 'actualResult', 'notes', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'teamId', 'teamOwnerId', 'ownerId', 'assignedBy', 'title', 'category', 'date', 'startTime', 'durationMin', 'goal', 'description', 'status', 'actualResult', 'notes', 'proofUrl', 'proofNote', 'proofVerified', 'createdAt', 'updatedAt']) &&
         isValidId(data.id) &&
         isValidId(data.teamId) &&
         isValidId(data.teamOwnerId) &&
@@ -137,13 +132,16 @@ service cloud.firestore {
         data.status in ['todo', 'in_progress', 'completed', 'skipped'] &&
         (!('actualResult' in data) || (data.actualResult is string && data.actualResult.size() <= 200)) &&
         (!('notes' in data) || (data.notes is string && data.notes.size() <= 500)) &&
+        (!('proofUrl' in data) || (data.proofUrl is string && data.proofUrl.size() <= 500)) &&
+        (!('proofNote' in data) || (data.proofNote is string && data.proofNote.size() <= 200)) &&
+        (!('proofVerified' in data) || data.proofVerified is bool) &&
         data.createdAt is timestamp &&
         data.updatedAt is timestamp;
     }
 
     function isValidAimLog(data) {
       return data.keys().hasAll(['id', 'teamId', 'teamOwnerId', 'ownerId', 'date', 'exerciseName', 'platform', 'focusArea', 'durationMin', 'score', 'accuracy', 'createdAt', 'updatedAt']) &&
-        data.keys().hasOnly(['id', 'teamId', 'teamOwnerId', 'ownerId', 'date', 'exerciseName', 'platform', 'focusArea', 'durationMin', 'score', 'accuracy', 'notes', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'teamId', 'teamOwnerId', 'ownerId', 'date', 'exerciseName', 'platform', 'focusArea', 'durationMin', 'score', 'accuracy', 'notes', 'proofUrl', 'proofType', 'proofNote', 'proofVerified', 'createdAt', 'updatedAt']) &&
         isValidId(data.id) &&
         isValidId(data.teamId) &&
         isValidId(data.teamOwnerId) &&
@@ -156,6 +154,10 @@ service cloud.firestore {
         data.score is number && data.score >= 0 && data.score <= 10000000 &&
         data.accuracy is number && data.accuracy >= 0 && data.accuracy <= 100 &&
         (!('notes' in data) || (data.notes is string && data.notes.size() <= 400)) &&
+        (!('proofUrl' in data) || (data.proofUrl is string && data.proofUrl.size() <= 500)) &&
+        (!('proofType' in data) || data.proofType in ['screenshot', 'video', 'link']) &&
+        (!('proofNote' in data) || (data.proofNote is string && data.proofNote.size() <= 200)) &&
+        (!('proofVerified' in data) || data.proofVerified is bool) &&
         data.createdAt is timestamp &&
         data.updatedAt is timestamp;
     }
@@ -227,7 +229,76 @@ service cloud.firestore {
         data.createdAt is timestamp;
     }
 
+    function isValidHubWorkspace(data) {
+      return data.keys().hasAll(['id', 'syncToken', 'revision', 'isCustomized', 'updatedAtMs', 'updatedBy', 'team', 'accounts', 'members', 'drills', 'aimLogs', 'scrims', 'availabilities', 'templates', 'notifications', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'syncToken', 'revision', 'isCustomized', 'updatedAtMs', 'updatedBy', 'team', 'accounts', 'members', 'drills', 'aimLogs', 'scrims', 'availabilities', 'templates', 'notifications', 'updatedAt']) &&
+        data.id == 'team_valorant_training_hub' &&
+        data.syncToken is string && data.syncToken == 'vth_cloud_sync_v2' &&
+        data.revision is number && data.revision >= 0 && data.revision <= 1000000000 &&
+        data.isCustomized is bool &&
+        data.updatedAtMs is number && data.updatedAtMs >= 0 &&
+        data.updatedBy is string && data.updatedBy.size() >= 1 && data.updatedBy.size() <= 128 &&
+        data.team is map &&
+        data.accounts is list && data.accounts.size() >= 2 && data.accounts.size() <= 50 && data.accounts[0] is map &&
+        data.members is list && data.members.size() >= 2 && data.members.size() <= 50 && data.members[0] is map &&
+        data.drills is list && data.drills.size() <= 250 && (data.drills.size() == 0 || data.drills[0] is map) &&
+        data.aimLogs is list && data.aimLogs.size() <= 250 && (data.aimLogs.size() == 0 || data.aimLogs[0] is map) &&
+        data.scrims is list && data.scrims.size() <= 100 && (data.scrims.size() == 0 || data.scrims[0] is map) &&
+        data.availabilities is list && data.availabilities.size() <= 250 && (data.availabilities.size() == 0 || data.availabilities[0] is map) &&
+        data.templates is list && data.templates.size() <= 50 && (data.templates.size() == 0 || data.templates[0] is map) &&
+        data.notifications is list && data.notifications.size() <= 150 && (data.notifications.size() == 0 || data.notifications[0] is map) &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidHubProof(data) {
+      return data.keys().hasAll(['id', 'workspaceId', 'syncToken', 'dataUrl', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'workspaceId', 'syncToken', 'dataUrl', 'updatedAt']) &&
+        isValidId(data.id) &&
+        data.workspaceId == 'team_valorant_training_hub' &&
+        data.syncToken is string && data.syncToken == 'vth_cloud_sync_v2' &&
+        data.dataUrl is string && data.dataUrl.size() >= 10 && data.dataUrl.size() <= 750000 &&
+        data.updatedAt is timestamp;
+    }
+
     // --- Collection Rules ---
+    match /hubWorkspaces/{workspaceId} {
+      allow get: if isValidId(workspaceId) && workspaceId == 'team_valorant_training_hub';
+      allow list: if false;
+      allow create: if isValidId(workspaceId) &&
+        workspaceId == 'team_valorant_training_hub' &&
+        isValidHubWorkspace(incoming()) &&
+        incoming().id == workspaceId &&
+        incoming().updatedAt == request.time;
+      allow update: if isValidId(workspaceId) &&
+        workspaceId == 'team_valorant_training_hub' &&
+        isValidHubWorkspace(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().syncToken == existing().syncToken &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['revision', 'isCustomized', 'updatedAtMs', 'updatedBy', 'team', 'accounts', 'members', 'drills', 'aimLogs', 'scrims', 'availabilities', 'templates', 'notifications', 'updatedAt']);
+      allow delete: if false;
+
+      match /proofs/{proofId} {
+        allow get: if isValidId(workspaceId) && isValidId(proofId) && workspaceId == 'team_valorant_training_hub';
+        allow list: if resource.data.workspaceId == 'team_valorant_training_hub' && resource.data.syncToken == 'vth_cloud_sync_v2';
+        allow create: if isValidId(workspaceId) && isValidId(proofId) &&
+          workspaceId == 'team_valorant_training_hub' &&
+          isValidHubProof(incoming()) &&
+          incoming().id == proofId &&
+          incoming().workspaceId == workspaceId &&
+          incoming().updatedAt == request.time;
+        allow update: if isValidId(workspaceId) && isValidId(proofId) &&
+          workspaceId == 'team_valorant_training_hub' &&
+          isValidHubProof(incoming()) &&
+          incoming().id == existing().id &&
+          incoming().workspaceId == existing().workspaceId &&
+          incoming().syncToken == existing().syncToken &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['dataUrl', 'updatedAt']);
+        allow delete: if isValidId(workspaceId) && isValidId(proofId) && workspaceId == 'team_valorant_training_hub';
+      }
+    }
+
     match /admins/{adminId} {
       allow get: if isOwner(adminId) || isAdmin();
       allow list, create, update, delete: if false;
@@ -315,6 +386,7 @@ service cloud.firestore {
           incoming().teamOwnerId == get(/databases/$(database)/documents/teams/$(teamId)).data.ownerId &&
           incoming().assignedBy == request.auth.uid &&
           (incoming().ownerId == request.auth.uid || isTeamCoach(teamId)) &&
+          (!('proofVerified' in incoming()) || incoming().proofVerified == false || isTeamCoach(teamId)) &&
           incoming().createdAt == request.time &&
           incoming().updatedAt == request.time;
         allow update: if isVerifiedUser() && isValidId(teamId) && isValidId(drillId) &&
@@ -327,8 +399,8 @@ service cloud.firestore {
           incoming().createdAt == existing().createdAt &&
           incoming().updatedAt == request.time && (
             isAdmin() ||
-            (isTeamCoach(teamId) && incoming().diff(existing()).affectedKeys().hasOnly(['ownerId', 'title', 'category', 'date', 'startTime', 'durationMin', 'goal', 'description', 'status', 'actualResult', 'notes', 'updatedAt'])) ||
-            (existing().ownerId == request.auth.uid && incoming().ownerId == existing().ownerId && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'category', 'date', 'startTime', 'durationMin', 'goal', 'description', 'status', 'actualResult', 'notes', 'updatedAt']))
+            (isTeamCoach(teamId) && incoming().diff(existing()).affectedKeys().hasOnly(['ownerId', 'title', 'category', 'date', 'startTime', 'durationMin', 'goal', 'description', 'status', 'actualResult', 'notes', 'proofUrl', 'proofNote', 'proofVerified', 'updatedAt'])) ||
+            (existing().ownerId == request.auth.uid && incoming().ownerId == existing().ownerId && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'category', 'date', 'startTime', 'durationMin', 'goal', 'description', 'status', 'actualResult', 'notes', 'proofUrl', 'proofNote', 'updatedAt']))
           );
         allow delete: if isValidId(teamId) && isValidId(drillId) && (isTeamCoach(teamId) || (isTeamMember(teamId) && existing().ownerId == request.auth.uid) || isAdmin());
       }
@@ -343,6 +415,7 @@ service cloud.firestore {
           incoming().teamId == teamId &&
           incoming().teamOwnerId == get(/databases/$(database)/documents/teams/$(teamId)).data.ownerId &&
           incoming().ownerId == request.auth.uid &&
+          (!('proofVerified' in incoming()) || incoming().proofVerified == false || isTeamCoach(teamId)) &&
           incoming().createdAt == request.time &&
           incoming().updatedAt == request.time;
         allow update: if isVerifiedUser() && isValidId(teamId) && isValidId(logId) &&
@@ -355,7 +428,8 @@ service cloud.firestore {
           incoming().createdAt == existing().createdAt &&
           incoming().updatedAt == request.time && (
             isAdmin() ||
-            (existing().ownerId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['date', 'exerciseName', 'platform', 'focusArea', 'durationMin', 'score', 'accuracy', 'notes', 'updatedAt']))
+            (isTeamCoach(teamId) && incoming().diff(existing()).affectedKeys().hasOnly(['proofVerified', 'updatedAt'])) ||
+            (existing().ownerId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['date', 'exerciseName', 'platform', 'focusArea', 'durationMin', 'score', 'accuracy', 'notes', 'proofUrl', 'proofType', 'proofNote', 'updatedAt']))
           );
         allow delete: if isValidId(teamId) && isValidId(logId) && ((isTeamMember(teamId) && existing().ownerId == request.auth.uid) || isTeamCoach(teamId) || isAdmin());
       }

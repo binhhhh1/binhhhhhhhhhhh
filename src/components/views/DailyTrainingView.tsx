@@ -11,7 +11,6 @@ import {
   ListChecks,
   Loader2,
   Plus,
-  RefreshCw,
   Search,
   Sparkles,
   Trash2,
@@ -20,18 +19,18 @@ import {
 } from 'lucide-react';
 import {
   DRILL_CATEGORIES,
-  type AiDailyPlan,
+  type AiEvaluationRecommendedDrill,
+  type AiTrainingEvaluation,
   type AimLog,
   type DataSourceMode,
   type DrillCategory,
   type DrillStatus,
-  type GeneratedDailyDrill,
   type TeamMember,
   type TeamRole,
   type TrainingDrill,
   type TrainingTemplate,
 } from '../../types/training';
-import { DEFAULT_AI_FOCUS_AREAS, toTrainingDrill } from '../../utils/aiDrills';
+import { QUICK_REPORT_AIM_PRESETS, toTrainingDrill } from '../../utils/aiDrills';
 import {
   captureScreenToDataUrl,
   compressImageFileToDataUrl,
@@ -55,13 +54,17 @@ interface DailyTrainingViewProps {
   teamOwnerId: string;
   activeTab?: DailyTrainingTab;
   onTabChange?: (tab: DailyTrainingTab) => void;
-  aiPlan: AiDailyPlan | null;
+  aiEvaluation: AiTrainingEvaluation | null;
   aiLoading: boolean;
   aiError: string;
-  onGenerateAiPlan: (options: {
-    focusAreas: string[];
-    durationBudgetMin: number;
-    force?: boolean;
+  onSubmitAiEvaluation: (input: {
+    reportedSummary: string;
+    durationMin: number;
+    scoreOrResult: string;
+    accuracyPct: number;
+    headshotPct: number;
+    proofImageDataUrl?: string;
+    targetOwnerId?: string;
   }) => Promise<void>;
   onSaveDrill: (drill: TrainingDrill, isNew: boolean) => Promise<void>;
   onVerifyDrillProof: (drillId: string, verified: boolean) => Promise<void>;
@@ -93,10 +96,10 @@ export function DailyTrainingView({
   teamOwnerId,
   activeTab,
   onTabChange,
-  aiPlan,
+  aiEvaluation,
   aiLoading,
   aiError,
-  onGenerateAiPlan,
+  onSubmitAiEvaluation,
   onSaveDrill,
   onVerifyDrillProof,
   onDeleteDrill,
@@ -115,14 +118,20 @@ export function DailyTrainingView({
     onTabChange?.(tab);
   };
 
-  const [aiFocusAreas, setAiFocusAreas] = useState<string[]>([
-    'Tracking',
-    'Flicking',
-    'Micro Adjustment',
-    'Crosshair Placement',
-  ]);
-  const [aiBudgetMin, setAiBudgetMin] = useState<number>(90);
+  // Player Self-Report Aim Training state for AI Evaluation
+  const [reportedSummary, setReportedSummary] = useState<string>(
+    'Range 100 Bots + Hard Bots 30 (Vandal) và 3 trận Deathmatch luyện Pre-aim',
+  );
+  const [evalDurationMin, setEvalDurationMin] = useState<number>(45);
+  const [evalScoreText, setEvalScoreText] = useState<string>(
+    '24/30 Hard Bots · Top 1 DM',
+  );
+  const [evalAccuracyPct, setEvalAccuracyPct] = useState<number>(91);
+  const [evalHeadshotPct, setEvalHeadshotPct] = useState<number>(40);
+  const [evalProofImage, setEvalProofImage] = useState<string>('');
+  const [evalFormError, setEvalFormError] = useState<string>('');
   const [addingAllAi, setAddingAllAi] = useState(false);
+
   const [selectedDate, setSelectedDate] = useState<string>(todayDate);
   const [showAllDates, setShowAllDates] = useState<boolean>(false);
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
@@ -478,15 +487,6 @@ export function DailyTrainingView({
     return set;
   }, [drills, targetPlanDate]);
 
-  const toggleAiFocus = (focus: string) => {
-    setAiFocusAreas((prev) => {
-      if (prev.includes(focus)) {
-        return prev.length > 1 ? prev.filter((f) => f !== focus) : prev;
-      }
-      return [...prev, focus];
-    });
-  };
-
   const targetOwnerForAi =
     activeRole === 'coach' && memberFilter !== 'ALL'
       ? memberFilter
@@ -494,7 +494,56 @@ export function DailyTrainingView({
       ? members.find((m) => m.teamRole === 'player')?.uid || currentUserId
       : currentUserId;
 
-  const handleAddSingleAiDrill = async (item: GeneratedDailyDrill) => {
+  const handleEvalProofFile = async (file: File | undefined) => {
+    if (!file) return;
+    setEvalFormError('');
+    setProofProcessing(true);
+    try {
+      const compressed = await compressImageFileToDataUrl(file);
+      setEvalProofImage(compressed);
+    } catch (err) {
+      setEvalFormError(
+        err instanceof Error ? err.message : 'Không thể xử lý ảnh kết quả.',
+      );
+    } finally {
+      setProofProcessing(false);
+    }
+  };
+
+  const handleEvalProofCapture = async () => {
+    setEvalFormError('');
+    setProofProcessing(true);
+    try {
+      const captured = await captureScreenToDataUrl();
+      setEvalProofImage(captured);
+    } catch (err) {
+      setEvalFormError(
+        err instanceof Error ? err.message : 'Không thể chụp màn hình.',
+      );
+    } finally {
+      setProofProcessing(false);
+    }
+  };
+
+  const handleSubmitSelfReportForAi = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reportedSummary.trim()) {
+      setEvalFormError('Vui lòng nhập nội dung các bài tập Aim bạn đã tập hôm nay.');
+      return;
+    }
+    setEvalFormError('');
+    await onSubmitAiEvaluation({
+      reportedSummary: reportedSummary.trim(),
+      durationMin: Math.max(5, Math.min(360, Number(evalDurationMin) || 45)),
+      scoreOrResult: evalScoreText.trim(),
+      accuracyPct: Math.max(10, Math.min(100, Number(evalAccuracyPct) || 88)),
+      headshotPct: Math.max(5, Math.min(100, Number(evalHeadshotPct) || 35)),
+      proofImageDataUrl: evalProofImage || undefined,
+      targetOwnerId: targetOwnerForAi,
+    });
+  };
+
+  const handleAddSingleAiDrill = async (item: AiEvaluationRecommendedDrill) => {
     const drill = toTrainingDrill(item, {
       id: `drill_ai_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       date: targetPlanDate,
@@ -507,11 +556,11 @@ export function DailyTrainingView({
   };
 
   const handleAddAllAiDrills = async () => {
-    if (!aiPlan || aiPlan.drills.length === 0) return;
+    if (!aiEvaluation || aiEvaluation.recommendedDrills.length === 0) return;
     setAddingAllAi(true);
     try {
-      for (let i = 0; i < aiPlan.drills.length; i++) {
-        const item = aiPlan.drills[i];
+      for (let i = 0; i < aiEvaluation.recommendedDrills.length; i++) {
+        const item = aiEvaluation.recommendedDrills[i];
         if (existingTitlesOnTargetDate.has(item.title.trim().toLowerCase())) {
           continue;
         }
@@ -529,6 +578,11 @@ export function DailyTrainingView({
       setAddingAllAi(false);
     }
   };
+
+  const playerMembersOnly = useMemo(
+    () => members.filter((m) => m.teamRole === 'player'),
+    [members],
+  );
 
   return (
     <div className="space-y-6">
@@ -576,15 +630,17 @@ export function DailyTrainingView({
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5 px-1">
-          {activeRole === 'coach' && members.length > 0 && (
+          {activeRole === 'coach' && playerMembersOnly.length > 0 && (
             <select
               aria-label="Lọc theo tuyển thủ"
               value={memberFilter}
               onChange={(e) => setMemberFilter(e.target.value)}
               className="bg-[#090B10] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white"
             >
-              <option value="ALL">Tất cả tuyển thủ ({members.length})</option>
-              {members.map((m) => (
+              <option value="ALL">
+                Tất cả tuyển thủ ({playerMembersOnly.length})
+              </option>
+              {playerMembersOnly.map((m) => (
                 <option key={m.uid} value={m.uid}>
                   {m.displayName} ({m.riotId})
                 </option>
@@ -595,8 +651,8 @@ export function DailyTrainingView({
             <Camera className="w-3.5 h-3.5 text-sky-400 shrink-0" />
             <span>
               {activeRole === 'coach'
-                ? 'Manager có thể giám sát lịch tập và duyệt ảnh bằng chứng của từng tuyển thủ.'
-                : 'Chụp màn hình trực tiếp, dán Ctrl+V hoặc tải ảnh kết quả để nộp cho Manager duyệt.'}
+                ? 'Manager có thể giám sát lịch tập, xem nhận xét AI và duyệt ảnh bằng chứng của từng tuyển thủ.'
+                : 'Khai báo buổi tập Aim, chụp màn hình kết quả và nhấn Submit để AI nhận xét hiệu quả.'}
             </span>
           </div>
         </div>
@@ -616,309 +672,496 @@ export function DailyTrainingView({
         />
       ) : (
         <>
-      {/* Action Toolbar */}
-      <div className="bg-[#121621] border border-white/[0.07] rounded-xl p-4 space-y-4">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-3">
-            <div>
-              <label htmlFor="daily-date-filter" className="sr-only">
-                Chọn ngày luyện tập
-              </label>
-              <input
-                id="daily-date-filter"
-                type="date"
-                value={selectedDate}
-                disabled={showAllDates}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                className="bg-[#090B10] border border-white/10 rounded-lg px-3 py-2 text-sm text-white font-mono tabular-nums disabled:opacity-40"
-              />
-            </div>
+          {/* Action Toolbar */}
+          <div className="bg-[#121621] border border-white/[0.07] rounded-xl p-4 space-y-4">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <div>
+                  <label htmlFor="daily-date-filter" className="sr-only">
+                    Chọn ngày luyện tập
+                  </label>
+                  <input
+                    id="daily-date-filter"
+                    type="date"
+                    value={selectedDate}
+                    disabled={showAllDates}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    className="bg-[#090B10] border border-white/10 rounded-lg px-3 py-2 text-sm text-white font-mono tabular-nums disabled:opacity-40"
+                  />
+                </div>
 
-            <button
-              type="button"
-              onClick={() => setShowAllDates((v) => !v)}
-              className={`px-3 py-2 rounded-lg text-xs font-medium border transition-colors whitespace-nowrap ${
-                showAllDates
-                  ? 'bg-sky-500/15 border-sky-400/40 text-sky-300'
-                  : 'bg-[#090B10] border-white/10 text-slate-300 hover:border-white/25'
-              }`}
-            >
-              {showAllDates ? 'Đang xem tất cả ngày' : 'Xem tất cả ngày'}
-            </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAllDates((v) => !v)}
+                  className={`px-3 py-2 rounded-lg text-xs font-medium border transition-colors whitespace-nowrap ${
+                    showAllDates
+                      ? 'bg-sky-500/15 border-sky-400/40 text-sky-300'
+                      : 'bg-[#090B10] border-white/10 text-slate-300 hover:border-white/25'
+                  }`}
+                >
+                  {showAllDates ? 'Đang xem tất cả ngày' : 'Xem tất cả ngày'}
+                </button>
 
-            <div className="text-xs text-slate-400 font-mono tabular-nums pl-1">
-              {filteredDrills.length} bài tập · {completedCount} hoàn thành ·{' '}
-              {(totalDayMinutes / 60).toFixed(1)}h dự kiến ·{' '}
-              <span className="text-sky-400">{drillWithProofCount} có ảnh chứng minh</span>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2.5">
-            <button
-              type="button"
-              onClick={() => setTemplateModalOpen(true)}
-              className="px-3.5 py-2 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] border border-white/10 text-xs font-medium text-slate-200 flex items-center gap-1.5 transition-colors whitespace-nowrap"
-            >
-              <Layers className="w-3.5 h-3.5 text-violet-400" />
-              <span>Template ({templates.length})</span>
-            </button>
-            <button
-              type="button"
-              onClick={openAddModal}
-              className="px-4 py-2 rounded-lg bg-[#FF4655] hover:bg-[#e53c4a] text-white text-xs font-semibold flex items-center gap-1.5 transition-colors whitespace-nowrap"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Thêm bài tập</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Search & Filters */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-white/[0.06]">
-          <div className="relative">
-            <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Tìm tên bài tập hoặc mục tiêu..."
-              aria-label="Tìm kiếm bài tập"
-              className="w-full bg-[#090B10] border border-white/10 rounded-lg pl-9 pr-3 py-2 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-sky-400"
-            />
-          </div>
-
-          <div>
-            <label htmlFor="drill-category-filter" className="sr-only">
-              Lọc theo loại bài tập
-            </label>
-            <select
-              id="drill-category-filter"
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
-              className="w-full bg-[#090B10] border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-400"
-            >
-              <option value="ALL">Tất cả 13 nhóm bài tập</option>
-              {DRILL_CATEGORIES.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label htmlFor="drill-status-filter" className="sr-only">
-              Lọc theo trạng thái
-            </label>
-            <select
-              id="drill-status-filter"
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="w-full bg-[#090B10] border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-400"
-            >
-              <option value="ALL">Mọi trạng thái</option>
-              <option value="todo">Chưa thực hiện</option>
-              <option value="in_progress">Đang thực hiện</option>
-              <option value="completed">Hoàn thành</option>
-              <option value="skipped">Bỏ qua</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      {/* AI Daily Drill Generator Panel */}
-      <section
-        aria-label="AI Coach bài tập Tracking và Flick hằng ngày"
-        className="bg-[#121621] border border-violet-500/25 rounded-xl p-4 lg:p-5 space-y-4"
-      >
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-          <div className="flex items-start gap-3">
-            <div className="p-2 rounded-lg bg-violet-500/15 text-violet-300 shrink-0">
-              <Sparkles className="w-4 h-4" />
-            </div>
-            <div>
-              <h2 className="font-display font-semibold text-sm sm:text-base text-white">
-                AI Coach — Giáo án Tracking & Flick hằng ngày
-              </h2>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Tự động đề xuất bài tập mới mỗi ngày theo ngày {formatFullVNDate(todayDate)} · Có thể chọn kỹ năng ưu tiên và thêm thẳng vào lịch.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
-            <label htmlFor="ai-duration-budget" className="sr-only">
-              Tổng thời lượng giáo án AI
-            </label>
-            <select
-              id="ai-duration-budget"
-              value={aiBudgetMin}
-              onChange={(e) => setAiBudgetMin(Number(e.target.value))}
-              className="bg-[#090B10] border border-white/10 rounded-lg px-2.5 py-2 text-xs text-white font-mono"
-            >
-              <option value={60}>60 phút</option>
-              <option value={90}>90 phút</option>
-              <option value={120}>120 phút</option>
-              <option value={150}>150 phút</option>
-            </select>
-
-            <button
-              type="button"
-              disabled={aiLoading}
-              onClick={() =>
-                void onGenerateAiPlan({
-                  focusAreas: aiFocusAreas,
-                  durationBudgetMin: aiBudgetMin,
-                  force: true,
-                })
-              }
-              className="px-3.5 py-2 rounded-lg bg-violet-500 hover:bg-violet-400 disabled:opacity-60 text-slate-950 text-xs font-semibold flex items-center gap-1.5 transition-colors whitespace-nowrap"
-            >
-              {aiLoading ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <RefreshCw className="w-3.5 h-3.5" />
-              )}
-              <span>{aiLoading ? 'Đang tạo giáo án...' : 'Tạo giáo án AI'}</span>
-            </button>
-
-            {aiPlan && aiPlan.drills.length > 0 && (
-              <button
-                type="button"
-                disabled={addingAllAi}
-                onClick={() => void handleAddAllAiDrills()}
-                className="px-3.5 py-2 rounded-lg bg-[#FF4655] hover:bg-[#e53c4a] disabled:opacity-60 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors whitespace-nowrap"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>{addingAllAi ? 'Đang thêm...' : 'Thêm tất cả vào lịch'}</span>
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Focus area selectors */}
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[11px] text-slate-400 mr-1">Trọng tâm:</span>
-          {DEFAULT_AI_FOCUS_AREAS.map((focus) => {
-            const active = aiFocusAreas.includes(focus);
-            return (
-              <button
-                key={focus}
-                type="button"
-                onClick={() => toggleAiFocus(focus)}
-                aria-pressed={active}
-                className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-colors ${
-                  active
-                    ? 'bg-sky-500/15 border-sky-400/40 text-sky-300'
-                    : 'bg-[#090B10] border-white/10 text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                {focus}
-              </button>
-            );
-          })}
-        </div>
-
-        {aiError && (
-          <div className="p-3 rounded-lg bg-[#FF4655]/15 border border-[#FF4655]/40 text-xs text-red-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <span>{aiError}</span>
-            <button
-              type="button"
-              onClick={() =>
-                void onGenerateAiPlan({
-                  focusAreas: aiFocusAreas,
-                  durationBudgetMin: aiBudgetMin,
-                  force: true,
-                })
-              }
-              className="px-3 py-1 rounded-md bg-white/10 hover:bg-white/15 text-white font-medium self-start sm:self-auto shrink-0"
-            >
-              Thử lại
-            </button>
-          </div>
-        )}
-
-        {aiLoading && !aiPlan && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {[1, 2, 3, 4].map((idx) => (
-              <div
-                key={idx}
-                className="h-24 rounded-lg bg-[#090B10] border border-white/[0.06] animate-pulse"
-              />
-            ))}
-          </div>
-        )}
-
-        {aiPlan && aiPlan.drills.length > 0 && (
-          <div className="space-y-3">
-            {aiPlan.coachNote && (
-              <div className="text-xs text-slate-300 bg-[#090B10] border border-white/[0.06] rounded-lg px-3 py-2">
-                <span className="text-violet-300 font-semibold">Ghi chú Coach AI: </span>
-                {aiPlan.coachNote}
+                <div className="text-xs text-slate-400 font-mono tabular-nums pl-1">
+                  {filteredDrills.length} bài tập · {completedCount} hoàn thành ·{' '}
+                  {(totalDayMinutes / 60).toFixed(1)}h dự kiến ·{' '}
+                  <span className="text-sky-400">
+                    {drillWithProofCount} có ảnh chứng minh
+                  </span>
+                </div>
               </div>
-            )}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {aiPlan.drills.map((item) => {
-                const alreadyAdded = existingTitlesOnTargetDate.has(
-                  item.title.trim().toLowerCase(),
-                );
-                return (
-                  <div
-                    key={item.id}
-                    className="p-3.5 rounded-lg bg-[#090B10] border border-white/[0.08] flex flex-col justify-between gap-3"
-                  >
-                    <div className="space-y-1">
-                      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-slate-400">
-                        <span className="text-violet-300 font-semibold">{item.focusTag}</span>
-                        <span aria-hidden="true">·</span>
-                        <span className="text-sky-400">{item.category}</span>
-                        <span aria-hidden="true">·</span>
-                        <span className="font-mono tabular-nums">
-                          {item.startTime} ({item.durationMin}p)
-                        </span>
-                      </div>
-                      <div className="text-sm font-semibold text-white">{item.title}</div>
-                      {item.goal && (
-                        <div className="text-xs text-emerald-400">Mục tiêu: {item.goal}</div>
-                      )}
-                      {item.description && (
-                        <p className="text-xs text-slate-400 leading-relaxed">
-                          {item.description}
-                        </p>
-                      )}
-                    </div>
 
-                    <div className="flex items-center justify-end pt-2 border-t border-white/[0.06]">
-                      <button
-                        type="button"
-                        disabled={alreadyAdded}
-                        onClick={() => void handleAddSingleAiDrill(item)}
-                        className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-colors ${
-                          alreadyAdded
-                            ? 'bg-emerald-500/15 text-emerald-400 cursor-default'
-                            : 'bg-white/[0.06] hover:bg-[#FF4655] text-slate-200 hover:text-white'
+              <div className="flex flex-wrap items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setTemplateModalOpen(true)}
+                  className="px-3.5 py-2 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] border border-white/10 text-xs font-medium text-slate-200 flex items-center gap-1.5 transition-colors whitespace-nowrap"
+                >
+                  <Layers className="w-3.5 h-3.5 text-violet-400" />
+                  <span>Template ({templates.length})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={openAddModal}
+                  className="px-4 py-2 rounded-lg bg-[#FF4655] hover:bg-[#e53c4a] text-white text-xs font-semibold flex items-center gap-1.5 transition-colors whitespace-nowrap"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Thêm bài tập</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Search & Filters */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-white/[0.06]">
+              <div className="relative">
+                <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Tìm tên bài tập hoặc mục tiêu..."
+                  aria-label="Tìm kiếm bài tập"
+                  className="w-full bg-[#090B10] border border-white/10 rounded-lg pl-9 pr-3 py-2 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-sky-400"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="drill-category-filter" className="sr-only">
+                  Lọc theo loại bài tập
+                </label>
+                <select
+                  id="drill-category-filter"
+                  value={categoryFilter}
+                  onChange={(e) => setCategoryFilter(e.target.value)}
+                  className="w-full bg-[#090B10] border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-400"
+                >
+                  <option value="ALL">Tất cả 13 nhóm bài tập</option>
+                  {DRILL_CATEGORIES.map((cat) => (
+                    <option key={cat} value={cat}>
+                      {cat}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label htmlFor="drill-status-filter" className="sr-only">
+                  Lọc theo trạng thái
+                </label>
+                <select
+                  id="drill-status-filter"
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="w-full bg-[#090B10] border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-400"
+                >
+                  <option value="ALL">Mọi trạng thái</option>
+                  <option value="todo">Chưa thực hiện</option>
+                  <option value="in_progress">Đang thực hiện</option>
+                  <option value="completed">Hoàn thành</option>
+                  <option value="skipped">Bỏ qua</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* AI Aim Self-Report & Effectiveness Evaluation Panel */}
+          <section
+            aria-label="Khai báo tập Aim hôm nay và Nhận xét hiệu quả bằng AI"
+            className="bg-[#121621] border border-violet-500/25 rounded-xl p-4 lg:p-5 space-y-5"
+          >
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-white/[0.07] pb-3.5">
+              <div className="flex items-start gap-3">
+                <div className="p-2 rounded-lg bg-violet-500/15 text-violet-300 shrink-0">
+                  <Sparkles className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="font-display font-semibold text-sm sm:text-base text-white">
+                    Nhận xét bằng AI — Khai báo tập Aim hôm nay &amp; Đánh giá mức độ hiệu quả
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Tuyển thủ tự khai báo hôm nay đã tập Aim những gì ({formatFullVNDate(todayDate)}). Sau khi Submit, AI sẽ chấm điểm hiệu quả và bổ sung cần tập luyện thêm những gì.
+                  </p>
+                </div>
+              </div>
+              <div className="text-xs font-mono text-violet-300 bg-violet-500/10 border border-violet-400/25 rounded-lg px-3 py-1.5 self-start lg:self-center shrink-0">
+                 Tuyển thủ: {getMemberName(targetOwnerForAi)}
+              </div>
+            </div>
+
+            {/* Self-Report Form */}
+            <form onSubmit={handleSubmitSelfReportForAi} className="space-y-3.5">
+              {(evalFormError || aiError) && (
+                <div className="p-3 rounded-lg bg-[#FF4655]/15 border border-[#FF4655]/40 text-xs text-red-200">
+                  {evalFormError || aiError}
+                </div>
+              )}
+
+              <div>
+                <label
+                  htmlFor="ai-reported-summary"
+                  className="block text-xs font-medium text-slate-200 mb-1.5"
+                >
+                  Hôm nay bạn đã tập Aim những gì? (Nhập chi tiết các bài tập đã thực hiện) *
+                </label>
+                <textarea
+                  id="ai-reported-summary"
+                  rows={2}
+                  required
+                  value={reportedSummary}
+                  onChange={(e) => setReportedSummary(e.target.value)}
+                  placeholder="VD: Bắn 100 bot Range Vandal, 25/30 Hard Bots, 20 phút Aimlabs Sixshot và 3 trận Deathmatch Sheriff..."
+                  className="w-full bg-[#090B10] border border-white/10 rounded-lg px-3 py-2 text-xs sm:text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-violet-400"
+                />
+                <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                  <span className="text-[11px] text-slate-400 mr-1">Chọn nhanh:</span>
+                  {QUICK_REPORT_AIM_PRESETS.map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() =>
+                        setReportedSummary((prev) =>
+                          prev.includes(preset)
+                            ? prev
+                            : prev.trim()
+                            ? `${prev.trim()}, ${preset}`
+                            : preset,
+                        )
+                      }
+                      className="px-2 py-1 rounded-md bg-[#090B10] hover:bg-white/[0.06] border border-white/10 text-[11px] text-slate-300 transition-colors"
+                    >
+                      + {preset}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div>
+                  <label
+                    htmlFor="ai-eval-duration"
+                    className="block text-xs font-medium text-slate-300 mb-1"
+                  >
+                    Thời lượng tập (phút)
+                  </label>
+                  <input
+                    id="ai-eval-duration"
+                    type="number"
+                    min={5}
+                    max={360}
+                    required
+                    value={evalDurationMin}
+                    onChange={(e) => setEvalDurationMin(Number(e.target.value))}
+                    className="w-full bg-[#090B10] border border-white/10 rounded-lg px-3 py-2 text-xs text-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor="ai-eval-accuracy"
+                    className="block text-xs font-medium text-slate-300 mb-1"
+                  >
+                    Accuracy (%)
+                  </label>
+                  <input
+                    id="ai-eval-accuracy"
+                    type="number"
+                    min={10}
+                    max={100}
+                    required
+                    value={evalAccuracyPct}
+                    onChange={(e) => setEvalAccuracyPct(Number(e.target.value))}
+                    className="w-full bg-[#090B10] border border-white/10 rounded-lg px-3 py-2 text-xs text-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor="ai-eval-hs"
+                    className="block text-xs font-medium text-slate-300 mb-1"
+                  >
+                    Headshot Rate (%)
+                  </label>
+                  <input
+                    id="ai-eval-hs"
+                    type="number"
+                    min={5}
+                    max={100}
+                    required
+                    value={evalHeadshotPct}
+                    onChange={(e) => setEvalHeadshotPct(Number(e.target.value))}
+                    className="w-full bg-[#090B10] border border-white/10 rounded-lg px-3 py-2 text-xs text-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor="ai-eval-score"
+                    className="block text-xs font-medium text-slate-300 mb-1"
+                  >
+                    Điểm số / Kết quả
+                  </label>
+                  <input
+                    id="ai-eval-score"
+                    type="text"
+                    value={evalScoreText}
+                    onChange={(e) => setEvalScoreText(e.target.value)}
+                    placeholder="VD: 25/30 Hard Bots · 95k"
+                    className="w-full bg-[#090B10] border border-white/10 rounded-lg px-3 py-2 text-xs text-white"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={proofProcessing}
+                    onClick={() => void handleEvalProofCapture()}
+                    className="px-3 py-1.5 rounded-lg border border-sky-400/35 bg-sky-500/10 hover:bg-sky-500/20 text-xs font-medium text-sky-300 inline-flex items-center gap-1.5 transition-colors"
+                  >
+                    <Camera className="w-3.5 h-3.5" />
+                    <span>Chụp màn hình KQ</span>
+                  </button>
+                  <label
+                    htmlFor="ai-eval-proof-file"
+                    className="px-3 py-1.5 rounded-lg border border-white/15 bg-[#090B10] hover:border-sky-400/50 text-xs text-slate-300 inline-flex items-center gap-1.5 cursor-pointer transition-colors"
+                  >
+                    <Upload className="w-3.5 h-3.5 text-sky-400" />
+                    <span>
+                      {evalProofImage ? 'Đã đính kèm ảnh KQ' : 'Đính kèm ảnh KQ'}
+                    </span>
+                    <input
+                      id="ai-eval-proof-file"
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        void handleEvalProofFile(e.target.files?.[0]);
+                        e.target.value = '';
+                      }}
+                      className="sr-only"
+                    />
+                  </label>
+                  {evalProofImage && (
+                    <button
+                      type="button"
+                      onClick={() => setEvalProofImage('')}
+                      className="text-xs text-[#FF4655] hover:underline"
+                    >
+                      Xóa ảnh
+                    </button>
+                  )}
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={aiLoading}
+                  className="px-5 py-2.5 rounded-lg bg-violet-500 hover:bg-violet-400 disabled:opacity-60 text-slate-950 text-xs font-semibold flex items-center justify-center gap-2 transition-colors whitespace-nowrap"
+                >
+                  {aiLoading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-4 h-4" />
+                  )}
+                  <span>
+                    {aiLoading
+                      ? 'AI đang phân tích & chấm điểm...'
+                      : 'Submit & Nhận xét bằng AI'}
+                  </span>
+                </button>
+              </div>
+            </form>
+
+            {/* AI Evaluation Output */}
+            {aiEvaluation && (
+              <div className="pt-4 border-t border-white/[0.08] space-y-4">
+                {/* Score & Overall Feedback Banner */}
+                <div className="p-4 rounded-xl bg-[#090B10] border border-violet-400/30 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="space-y-1.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="px-2.5 py-0.5 rounded-md bg-violet-500/20 border border-violet-400/40 text-violet-200 text-xs font-semibold">
+                        Đánh giá AI: {aiEvaluation.effectivenessLevel}
+                      </span>
+                      <span className="text-xs text-slate-400 font-mono">
+                        {aiEvaluation.playerName} ({aiEvaluation.gameRole} ·{' '}
+                        {aiEvaluation.mainAgent}) · {aiEvaluation.durationMin} phút
+                      </span>
+                    </div>
+                    <p className="text-xs sm:text-sm text-slate-200 leading-relaxed">
+                      {aiEvaluation.overallFeedback}
+                    </p>
+                  </div>
+
+                  <div className="shrink-0 flex items-center gap-3 bg-[#121621] border border-white/10 rounded-xl px-4 py-3 self-start md:self-center">
+                    <div>
+                      <div className="text-[11px] text-slate-400">
+                        Điểm hiệu quả
+                      </div>
+                      <div
+                        className={`font-display font-bold text-2xl font-mono tabular-nums ${
+                          aiEvaluation.effectivenessScore >= 85
+                            ? 'text-emerald-400'
+                            : aiEvaluation.effectivenessScore >= 70
+                            ? 'text-sky-400'
+                            : 'text-amber-400'
                         }`}
                       >
-                        {alreadyAdded ? (
-                          <>
-                            <Check className="w-3.5 h-3.5" />
-                            <span>Đã có trong lịch</span>
-                          </>
-                        ) : (
-                          <>
-                            <Plus className="w-3.5 h-3.5" />
-                            <span>Thêm vào ngày {formatFullVNDate(targetPlanDate)}</span>
-                          </>
-                        )}
-                      </button>
+                        {aiEvaluation.effectivenessScore}
+                        <span className="text-xs text-slate-500 font-normal">
+                          /100
+                        </span>
+                      </div>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-      </section>
+                </div>
+
+                {/* Strengths, Weaknesses & What To Practice Next */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                  <div className="p-3.5 rounded-xl bg-[#090B10] border border-emerald-500/25 space-y-2">
+                    <div className="text-xs font-semibold text-emerald-400 flex items-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                      <span>Điểm đạt hiệu quả tốt hôm nay</span>
+                    </div>
+                    <ul className="space-y-1.5 text-xs text-slate-300 leading-relaxed">
+                      {aiEvaluation.strengths.map((item, idx) => (
+                        <li key={idx}>· {item}</li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl bg-[#090B10] border border-amber-500/25 space-y-2">
+                    <div className="text-xs font-semibold text-amber-300 flex items-center gap-1.5">
+                      <Crosshair className="w-3.5 h-3.5 shrink-0" />
+                      <span>Điểm còn thiếu / Cần lưu ý</span>
+                    </div>
+                    <ul className="space-y-1.5 text-xs text-slate-300 leading-relaxed">
+                      {aiEvaluation.weaknesses.map((item, idx) => (
+                        <li key={idx}>· {item}</li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl bg-[#090B10] border border-sky-400/35 space-y-2">
+                    <div className="text-xs font-semibold text-sky-300 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                      <span>AI Bổ sung: Cần tập luyện thêm những gì</span>
+                    </div>
+                    <ul className="space-y-1.5 text-xs text-slate-200 leading-relaxed">
+                      {aiEvaluation.whatToPracticeNext.map((item, idx) => (
+                        <li key={idx}>· {item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+
+                {/* Concrete Recommended Drills to Practice Next */}
+                {aiEvaluation.recommendedDrills.length > 0 && (
+                  <div className="space-y-2.5">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="text-xs font-semibold text-white">
+                        Bài tập AI đề xuất cần tập luyện bổ sung ({aiEvaluation.recommendedDrills.length} bài tập):
+                      </div>
+                      <button
+                        type="button"
+                        disabled={addingAllAi}
+                        onClick={() => void handleAddAllAiDrills()}
+                        className="px-3 py-1.5 rounded-lg bg-[#FF4655] hover:bg-[#e53c4a] disabled:opacity-60 text-white text-xs font-semibold inline-flex items-center gap-1.5 self-start sm:self-auto"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>
+                          {addingAllAi
+                            ? 'Đang thêm...'
+                            : 'Thêm tất cả bài tập đề xuất vào lịch'}
+                        </span>
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      {aiEvaluation.recommendedDrills.map((item) => {
+                        const alreadyAdded = existingTitlesOnTargetDate.has(
+                          item.title.trim().toLowerCase(),
+                        );
+                        return (
+                          <div
+                            key={item.id}
+                            className="p-3.5 rounded-lg bg-[#090B10] border border-white/[0.08] flex flex-col justify-between gap-3"
+                          >
+                            <div className="space-y-1">
+                              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-slate-400">
+                                <span className="text-violet-300 font-semibold">
+                                  {item.focusTag}
+                                </span>
+                                <span aria-hidden="true">·</span>
+                                <span className="text-sky-400">{item.category}</span>
+                                <span aria-hidden="true">·</span>
+                                <span className="font-mono tabular-nums">
+                                  {item.durationMin}p
+                                </span>
+                              </div>
+                              <div className="text-xs sm:text-sm font-semibold text-white">
+                                {item.title}
+                              </div>
+                              {item.goal && (
+                                <div className="text-xs text-emerald-400">
+                                  Mục tiêu: {item.goal}
+                                </div>
+                              )}
+                              {item.description && (
+                                <p className="text-xs text-slate-400 leading-relaxed">
+                                  {item.description}
+                                </p>
+                              )}
+                            </div>
+
+                            <div className="flex items-center justify-end pt-2 border-t border-white/[0.06]">
+                              <button
+                                type="button"
+                                disabled={alreadyAdded}
+                                onClick={() => void handleAddSingleAiDrill(item)}
+                                className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-colors ${
+                                  alreadyAdded
+                                    ? 'bg-emerald-500/15 text-emerald-400 cursor-default'
+                                    : 'bg-white/[0.06] hover:bg-[#FF4655] text-slate-200 hover:text-white'
+                                }`}
+                              >
+                                {alreadyAdded ? (
+                                  <>
+                                    <Check className="w-3.5 h-3.5" />
+                                    <span>Đã có trong lịch</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Plus className="w-3.5 h-3.5" />
+                                    <span>Thêm vào lịch tập</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
 
       {/* Drills List */}
       <div className="bg-[#121621] border border-white/[0.07] rounded-xl overflow-hidden">

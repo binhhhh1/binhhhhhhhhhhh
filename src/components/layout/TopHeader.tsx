@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Bell, LogOut, Menu } from 'lucide-react';
+import { Bell, Cloud, LogOut, Menu, RefreshCw } from 'lucide-react';
+import type { CloudHubSyncStatus } from '../../services/localAuth';
 import type { DataSourceMode, NavSection, TeamRole, UserProfile } from '../../types/training';
 import { getVNClockDisplay } from '../../utils/timezone';
 
@@ -21,6 +22,8 @@ interface TopHeaderProps {
   userProfile: UserProfile | null;
   activeRole: TeamRole;
   isAdminAccount?: boolean;
+  cloudSyncStatus?: CloudHubSyncStatus;
+  onForceCloudSync?: () => Promise<void>;
   onSignOut: () => void;
 }
 
@@ -29,14 +32,16 @@ export function TopHeader({
   unreadNotifications,
   onOpenNotifications,
   onOpenMobileMenu,
-  dataMode,
   userProfile,
   activeRole,
   isAdminAccount,
+  cloudSyncStatus,
+  onForceCloudSync,
   onSignOut,
 }: TopHeaderProps) {
   const [clock, setClock] = useState(() => getVNClockDisplay());
   const [imgError, setImgError] = useState(false);
+  const [syncingNow, setSyncingNow] = useState(false);
 
   useEffect(() => {
     const id = window.setInterval(() => {
@@ -44,6 +49,16 @@ export function TopHeader({
     }, 1000);
     return () => window.clearInterval(id);
   }, []);
+
+  const handleManualSync = async () => {
+    if (!onForceCloudSync || syncingNow) return;
+    setSyncingNow(true);
+    try {
+      await onForceCloudSync();
+    } finally {
+      setSyncingNow(false);
+    }
+  };
 
   return (
     <header className="h-16 bg-[#0D1017] border-b border-white/[0.07] px-4 lg:px-6 flex items-center justify-between gap-4 shrink-0">
@@ -71,6 +86,23 @@ export function TopHeader({
       </div>
 
       <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+        {/* Live Cross-Device Cloud Sync Badge */}
+        <button
+          type="button"
+          onClick={() => void handleManualSync()}
+          title="Nhấn để làm mới dữ liệu trực tiếp từ Cloud Firestore"
+          className="px-2.5 py-2 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/25 text-emerald-300 flex items-center gap-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0"
+        >
+          <Cloud className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+          <span className="hidden xl:inline">Cloud Sync</span>
+          <span className="font-mono text-[11px] text-emerald-200">
+            v{cloudSyncStatus?.revision || 1}
+          </span>
+          <RefreshCw
+            className={`w-3 h-3 text-emerald-400 ${syncingNow ? 'animate-spin' : ''}`}
+          />
+        </button>
+
         <button
           type="button"
           onClick={onOpenNotifications}
@@ -113,7 +145,7 @@ export function TopHeader({
                   : activeRole === 'coach'
                   ? 'Manager / Coach'
                   : 'Tuyển thủ (Player)'}{' '}
-                · {dataMode === 'cloud' ? 'Cloud' : 'Unified DB'}
+                · Cloud DB
               </div>
             </div>
             <button

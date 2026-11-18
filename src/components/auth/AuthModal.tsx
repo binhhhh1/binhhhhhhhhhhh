@@ -1,20 +1,18 @@
 import React, { useState } from 'react';
 import {
   CheckCircle2,
+  Cloud,
   Crosshair,
   Lock,
+  RefreshCw,
   Shield,
   ShieldCheck,
   Sparkles,
-  UserPlus,
   Users,
   X,
 } from 'lucide-react';
-import {
-  GAME_ROLES,
-  type GameRole,
-  type TeamRole,
-} from '../../types/training';
+import type { CloudHubSyncStatus } from '../../services/localAuth';
+import type { GameRole, TeamRole } from '../../types/training';
 
 export interface AuthModalSubmitPayload {
   mode: 'login' | 'register';
@@ -35,6 +33,8 @@ interface AuthModalProps {
   fullPage?: boolean;
   busy: boolean;
   error: string;
+  cloudSyncStatus?: CloudHubSyncStatus;
+  onForceCloudSync?: () => Promise<void>;
   savedAccounts: Array<{
     uid: string;
     identifier: string;
@@ -55,21 +55,16 @@ export function AuthModal({
   fullPage = false,
   busy,
   error,
+  cloudSyncStatus,
+  onForceCloudSync,
   savedAccounts,
   onClose,
   onClearError,
   onSubmit,
 }: AuthModalProps) {
-  const [mode, setMode] = useState<'login' | 'register'>('login');
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
-  const [displayName, setDisplayName] = useState('');
-  const [riotId, setRiotId] = useState('');
-  const [gameRole, setGameRole] = useState<GameRole>('Duelist');
-  const [mainAgent, setMainAgent] = useState('Jett');
-  const [managerIdentifier, setManagerIdentifier] = useState('binh');
-  const [managerPassword, setManagerPassword] = useState('');
-  const [useCloudSync, setUseCloudSync] = useState(false);
+  const [syncingNow, setSyncingNow] = useState(false);
 
   if (!open) return null;
 
@@ -80,26 +75,24 @@ export function AuthModal({
     (a) => a.teamRole !== 'coach' && !a.isAdmin,
   );
 
-  const handleTabSwitch = (nextMode: 'login' | 'register') => {
-    setMode(nextMode);
-    onClearError();
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     await onSubmit({
-      mode,
+      mode: 'login',
       identifier,
       password,
-      displayName,
-      riotId,
-      teamRole: 'player',
-      gameRole,
-      mainAgent,
-      managerIdentifier,
-      managerPassword,
-      useCloudSync,
+      useCloudSync: false,
     });
+  };
+
+  const handleManualSync = async () => {
+    if (!onForceCloudSync || syncingNow) return;
+    setSyncingNow(true);
+    try {
+      await onForceCloudSync();
+    } finally {
+      setSyncingNow(false);
+    }
   };
 
   const formCard = (
@@ -109,24 +102,21 @@ export function AuthModal({
       aria-labelledby="auth-modal-title"
       className="w-full max-w-md bg-[#121621] border border-white/10 rounded-2xl overflow-hidden shadow-2xl flex flex-col"
     >
-      <div className="px-5 py-4 border-b border-white/[0.07] flex items-center justify-between">
+      <div className="px-5 py-4 border-b border-white/[0.07] flex items-center justify-between bg-[#0D1017]">
         <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg bg-[#FF4655]/15 border border-[#FF4655]/40 flex items-center justify-center">
+          <div className="w-8 h-8 rounded-lg bg-[#FF4655]/15 border border-[#FF4655]/40 flex items-center justify-center">
             <ShieldCheck className="w-4 h-4 text-[#FF4655]" />
           </div>
           <div>
             <h2
               id="auth-modal-title"
-              className="font-display font-semibold text-base text-white"
+              className="font-display font-semibold text-base text-white flex items-center gap-1.5"
             >
-              {mode === 'login'
-                ? 'Đăng nhập hệ thống'
-                : 'Cấp tài khoản Tuyển thủ (Manager)'}
+              <Lock className="w-3.5 h-3.5 text-[#FF4655]" />
+              <span>Đăng nhập hệ thống</span>
             </h2>
             <p className="text-[11px] text-slate-400">
-              {mode === 'login'
-                ? 'Cơ sở dữ liệu đồng nhất giữa Ban Huấn Luyện & Tuyển thủ'
-                : 'Chỉ quyền Manager mới được phép thêm tuyển thủ vào đội'}
+              Đồng bộ thời gian thực trên mọi máy tính &amp; trình duyệt
             </p>
           </div>
         </div>
@@ -142,162 +132,107 @@ export function AuthModal({
         )}
       </div>
 
-      {/* Mode Tabs */}
-      <div className="grid grid-cols-2 border-b border-white/[0.07] bg-[#0D1017]">
-        <button
-          type="button"
-          onClick={() => handleTabSwitch('login')}
-          className={`py-3 text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 border-b-2 ${
-            mode === 'login'
-              ? 'border-[#FF4655] text-white bg-white/[0.03]'
-              : 'border-transparent text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          <Lock className="w-3.5 h-3.5" />
-          <span>Đăng nhập</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => handleTabSwitch('register')}
-          className={`py-3 text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 border-b-2 ${
-            mode === 'register'
-              ? 'border-[#FF4655] text-white bg-white/[0.03]'
-              : 'border-transparent text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          <UserPlus className="w-3.5 h-3.5" />
-          <span>Thêm Tuyển Thủ (Manager)</span>
-        </button>
-      </div>
-
       <form onSubmit={handleSubmit} className="p-5 space-y-4 overflow-y-auto">
+        {/* Live Cross-Device Cloud Sync Status Bar */}
+        <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <Cloud className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            <div className="text-[11px] text-emerald-200 truncate">
+              <span className="font-semibold">Cloud Database Đồng Nhất</span>
+              <span className="mx-1.5 text-emerald-500/60">·</span>
+              <span className="font-mono text-emerald-300/90">
+                v{cloudSyncStatus?.revision || 1}
+                {cloudSyncStatus?.lastSyncedAt ? ` (${cloudSyncStatus.lastSyncedAt})` : ''}
+              </span>
+            </div>
+          </div>
+          {onForceCloudSync && (
+            <button
+              type="button"
+              onClick={() => void handleManualSync()}
+              disabled={syncingNow}
+              className="px-2 py-1 rounded bg-emerald-500/20 hover:bg-emerald-500/30 text-[10px] font-semibold text-emerald-200 flex items-center gap-1 shrink-0 transition-colors"
+            >
+              <RefreshCw className={`w-3 h-3 ${syncingNow ? 'animate-spin' : ''}`} />
+              <span>Đồng bộ</span>
+            </button>
+          )}
+        </div>
+
         {error && (
           <div className="p-3 rounded-lg bg-[#FF4655]/15 border border-[#FF4655]/40 text-xs text-red-200 leading-relaxed">
             {error}
           </div>
         )}
 
-        {mode === 'login' && (
-          <div className="space-y-2.5">
-            {managerAccounts.length > 0 && (
-              <div className="space-y-1.5">
-                <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
-                  <Shield className="w-3 h-3 text-[#FF4655]" />
-                  <span>Tài khoản Ban Huấn Luyện / Manager:</span>
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {managerAccounts.map((acc) => (
-                    <button
-                      key={acc.uid}
-                      type="button"
-                      onClick={() => {
-                        setIdentifier(acc.identifier);
-                        onClearError();
-                      }}
-                      className={`px-2.5 py-1.5 rounded-lg border text-xs transition-colors ${
-                        identifier === acc.identifier
-                          ? 'bg-[#FF4655]/20 border-[#FF4655]/60 text-white'
-                          : 'bg-[#090B10] hover:bg-white/[0.06] border-white/10 text-slate-200'
-                      }`}
-                    >
-                      <span className="font-mono font-semibold">{acc.identifier}</span> ·{' '}
-                      <span className="text-[#FF4655] font-medium">
-                        {acc.isAdmin ? 'Admin / Manager' : 'Manager'}
-                      </span>
-                    </button>
-                  ))}
-                </div>
+        <div className="space-y-3">
+          {managerAccounts.length > 0 && (
+            <div className="space-y-1.5">
+              <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
+                <Shield className="w-3 h-3 text-[#FF4655]" />
+                <span>Tài khoản Ban Huấn Luyện / Manager:</span>
               </div>
-            )}
-
-            {playerAccounts.length > 0 && (
-              <div className="space-y-1.5">
-                <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
-                  <Users className="w-3 h-3 text-sky-400" />
-                  <span>Tuyển thủ trực thuộc Manager (Mật khẩu mặc định: 123456):</span>
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {playerAccounts.map((acc) => (
-                    <button
-                      key={acc.uid}
-                      type="button"
-                      onClick={() => {
-                        setIdentifier(acc.identifier);
-                        onClearError();
-                      }}
-                      className={`px-2.5 py-1 rounded-lg border text-xs transition-colors ${
-                        identifier === acc.identifier
-                          ? 'bg-sky-500/20 border-sky-400/60 text-white'
-                          : 'bg-[#090B10] hover:bg-white/[0.06] border-white/10 text-slate-300'
-                      }`}
-                    >
-                      <span className="font-mono font-semibold">{acc.identifier}</span> ·{' '}
-                      <span className="text-sky-400">{acc.riotId}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {mode === 'register' && (
-          <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-400/30 space-y-3">
-            <div className="text-xs font-semibold text-amber-200 flex items-center gap-1.5">
-              <Shield className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-              <span>Xác thực quyền Manager để thêm tuyển thủ</span>
-            </div>
-            <p className="text-[11px] text-slate-300 leading-relaxed">
-              Chỉ tài khoản có quyền <strong>Manager</strong> (VD: <code className="text-amber-300">noti</code> hoặc{' '}
-              <code className="text-amber-300">binh</code>) mới được phép thêm tuyển thủ mới. Tuyển thủ tạo ra sẽ thuộc quyền kiểm soát của Manager trên cùng database.
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              <div>
-                <label
-                  htmlFor="auth-manager-id"
-                  className="block text-[11px] font-medium text-slate-300 mb-1"
-                >
-                  Tài khoản Manager *
-                </label>
-                <input
-                  id="auth-manager-id"
-                  type="text"
-                  required
-                  value={managerIdentifier}
-                  onChange={(e) => setManagerIdentifier(e.target.value)}
-                  placeholder="noti hoặc binh"
-                  className="w-full bg-[#090B10] border border-white/15 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
-                />
-              </div>
-              <div>
-                <label
-                  htmlFor="auth-manager-pw"
-                  className="block text-[11px] font-medium text-slate-300 mb-1"
-                >
-                  Mật khẩu Manager *
-                </label>
-                <input
-                  id="auth-manager-pw"
-                  type="password"
-                  required
-                  value={managerPassword}
-                  onChange={(e) => setManagerPassword(e.target.value)}
-                  placeholder="Mật khẩu của Manager"
-                  className="w-full bg-[#090B10] border border-white/15 rounded-lg px-2.5 py-1.5 text-xs text-white"
-                />
+              <div className="flex flex-wrap gap-1.5">
+                {managerAccounts.map((acc) => (
+                  <button
+                    key={acc.uid}
+                    type="button"
+                    onClick={() => {
+                      setIdentifier(acc.identifier);
+                      onClearError();
+                    }}
+                    className={`px-2.5 py-1.5 rounded-lg border text-xs transition-colors ${
+                      identifier === acc.identifier
+                        ? 'bg-[#FF4655]/20 border-[#FF4655]/60 text-white'
+                        : 'bg-[#090B10] hover:bg-white/[0.06] border-white/10 text-slate-200'
+                    }`}
+                  >
+                    <span className="font-mono font-semibold">{acc.identifier}</span> ·{' '}
+                    <span className="text-[#FF4655] font-medium">
+                      {acc.isAdmin ? 'Admin / Manager' : 'Manager'}
+                    </span>
+                  </button>
+                ))}
               </div>
             </div>
-          </div>
-        )}
+          )}
+
+          {playerAccounts.length > 0 && (
+            <div className="space-y-1.5">
+              <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
+                <Users className="w-3 h-3 text-sky-400" />
+                <span>Tuyển thủ trực thuộc Manager (Đồng bộ thời gian thực):</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {playerAccounts.map((acc) => (
+                  <button
+                    key={acc.uid}
+                    type="button"
+                    onClick={() => {
+                      setIdentifier(acc.identifier);
+                      onClearError();
+                    }}
+                    className={`px-2.5 py-1 rounded-lg border text-xs transition-colors ${
+                      identifier === acc.identifier
+                        ? 'bg-sky-500/20 border-sky-400/60 text-white'
+                        : 'bg-[#090B10] hover:bg-white/[0.06] border-white/10 text-slate-300'
+                    }`}
+                  >
+                    <span className="font-mono font-semibold">{acc.identifier}</span> ·{' '}
+                    <span className="text-sky-400">{acc.riotId}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
 
         <div>
           <label
             htmlFor="auth-identifier"
             className="block text-xs font-medium text-slate-300 mb-1.5"
           >
-            {mode === 'login'
-              ? 'Tên đăng nhập hoặc Email *'
-              : 'Tên đăng nhập cấp cho Tuyển thủ *'}
+            Tên đăng nhập *
           </label>
           <input
             id="auth-identifier"
@@ -306,13 +241,7 @@ export function AuthModal({
             autoComplete="username"
             value={identifier}
             onChange={(e) => setIdentifier(e.target.value)}
-            placeholder={
-              useCloudSync
-                ? 'email@example.com'
-                : mode === 'login'
-                ? 'VD: noti, binh, kyro...'
-                : 'VD: tenz_vn'
-            }
+            placeholder="VD: noti, binh, hoặc tên đăng nhập tuyển thủ..."
             className="w-full bg-[#090B10] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-sky-400"
           />
         </div>
@@ -322,16 +251,14 @@ export function AuthModal({
             htmlFor="auth-password"
             className="block text-xs font-medium text-slate-300 mb-1.5"
           >
-            {mode === 'login'
-              ? 'Mật khẩu *'
-              : 'Mật khẩu cấp cho Tuyển thủ * (tối thiểu 6 ký tự)'}
+            Mật khẩu *
           </label>
           <input
             id="auth-password"
             type="password"
             required
             minLength={6}
-            autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+            autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="••••••"
@@ -339,116 +266,9 @@ export function AuthModal({
           />
         </div>
 
-        {mode === 'register' && (
-          <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label
-                  htmlFor="auth-display-name"
-                  className="block text-xs font-medium text-slate-300 mb-1.5"
-                >
-                  Họ tên / Nickname Tuyển thủ *
-                </label>
-                <input
-                  id="auth-display-name"
-                  type="text"
-                  required
-                  value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
-                  placeholder="VD: Minh Tuấn"
-                  className="w-full bg-[#090B10] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-slate-500"
-                />
-              </div>
-              <div>
-                <label
-                  htmlFor="auth-riot-id"
-                  className="block text-xs font-medium text-slate-300 mb-1.5"
-                >
-                  Riot ID *
-                </label>
-                <input
-                  id="auth-riot-id"
-                  type="text"
-                  required
-                  value={riotId}
-                  onChange={(e) => setRiotId(e.target.value)}
-                  placeholder="VD: Tuấn#VN1"
-                  className="w-full bg-[#090B10] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-slate-500"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div>
-                <label
-                  htmlFor="auth-team-role"
-                  className="block text-xs font-medium text-slate-300 mb-1.5"
-                >
-                  Phân quyền
-                </label>
-                <input
-                  id="auth-team-role"
-                  type="text"
-                  disabled
-                  value="Player (Trực thuộc Manager)"
-                  className="w-full bg-[#090B10]/60 border border-white/10 rounded-lg px-2.5 py-2 text-xs text-sky-400 font-medium cursor-not-allowed"
-                />
-              </div>
-
-              <div>
-                <label
-                  htmlFor="auth-game-role"
-                  className="block text-xs font-medium text-slate-300 mb-1.5"
-                >
-                  Role In-game
-                </label>
-                <select
-                  id="auth-game-role"
-                  value={gameRole}
-                  onChange={(e) => setGameRole(e.target.value as GameRole)}
-                  className="w-full bg-[#090B10] border border-white/10 rounded-lg px-2.5 py-2 text-xs text-white"
-                >
-                  {GAME_ROLES.map((r) => (
-                    <option key={r} value={r}>
-                      {r}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label
-                  htmlFor="auth-main-agent"
-                  className="block text-xs font-medium text-slate-300 mb-1.5"
-                >
-                  Main Agent
-                </label>
-                <input
-                  id="auth-main-agent"
-                  type="text"
-                  value={mainAgent}
-                  onChange={(e) => setMainAgent(e.target.value)}
-                  placeholder="Jett"
-                  className="w-full bg-[#090B10] border border-white/10 rounded-lg px-2.5 py-2 text-xs text-white"
-                />
-              </div>
-            </div>
-          </>
-        )}
-
-        {mode === 'login' && (
-          <label className="flex items-start gap-2.5 p-3 rounded-lg bg-[#090B10] border border-white/[0.07] cursor-pointer">
-            <input
-              type="checkbox"
-              checked={useCloudSync}
-              onChange={(e) => setUseCloudSync(e.target.checked)}
-              className="mt-0.5 accent-sky-400"
-            />
-            <span className="text-[11px] text-slate-300 leading-relaxed">
-              Đồng bộ qua tài khoản Email/Mật khẩu Firebase Auth (tùy chọn). Bỏ chọn để đăng nhập hệ thống Database hợp nhất của đội.
-            </span>
-          </label>
-        )}
+        <div className="p-2.5 rounded-lg bg-white/[0.03] border border-white/[0.06] text-[11px] text-slate-400 leading-relaxed">
+          Mọi thay đổi từ <strong className="text-slate-200">Manager</strong> (thêm/xóa tuyển thủ, giao nhiệm vụ, lịch Scrim) và <strong className="text-sky-400">Tuyển thủ</strong> đều tự động đồng bộ trực tiếp lên Cloud Firestore cho tất cả máy tính và trình duyệt.
+        </div>
 
         <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-white/[0.07]">
           {!fullPage && onClose && (
@@ -463,13 +283,9 @@ export function AuthModal({
           <button
             type="submit"
             disabled={busy}
-            className="w-full sm:w-auto px-5 py-2.5 rounded-lg bg-[#FF4655] hover:bg-[#e53c4a] disabled:opacity-60 text-xs font-semibold text-white transition-colors"
+            className="w-full px-5 py-2.5 rounded-lg bg-[#FF4655] hover:bg-[#e53c4a] disabled:opacity-60 text-xs font-semibold text-white transition-colors"
           >
-            {busy
-              ? 'Đang xử lý...'
-              : mode === 'login'
-              ? 'Đăng nhập vào Hub'
-              : 'Xác nhận thêm Tuyển thủ'}
+            {busy ? 'Đang đăng nhập...' : 'Đăng nhập vào Hub'}
           </button>
         </div>
       </form>
@@ -520,7 +336,7 @@ export function AuthModal({
           </div>
         </div>
         <div className="hidden sm:flex items-center gap-2 text-xs text-slate-400 font-mono">
-          <span>Database hợp nhất toàn đội</span>
+          <span className="text-emerald-400">Cloud Firestore Real-time Sync</span>
           <span>·</span>
           <span className="text-sky-400">Manager Controlled</span>
         </div>
@@ -531,7 +347,7 @@ export function AuthModal({
           <div className="lg:col-span-7 space-y-6">
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#121621] border border-white/10 text-xs text-sky-400 font-medium">
               <Sparkles className="w-3.5 h-3.5 text-[#FF4655]" />
-              <span>Hệ thống Quản lý Đội tuyển, Lịch Scrim &amp; Giáo án Aim Valorant</span>
+              <span>Hệ thống Quản lý Đội tuyển, Lịch Scrim &amp; AI Đánh Giá Hiệu Quả Tập Aim</span>
             </div>
 
             <div className="space-y-3">
@@ -540,9 +356,9 @@ export function AuthModal({
                 <span className="text-[#FF4655]">Database Đồng Nhất</span> &amp; Phân Quyền Manager.
               </h1>
               <p className="text-sm text-slate-300 leading-relaxed max-w-xl">
-                Toàn bộ dữ liệu đội hình, bài tập hằng ngày, điểm số Aim, ảnh chụp màn hình bằng chứng và lịch Scrim được đồng bộ xuyên suốt giữa{' '}
+                Toàn bộ dữ liệu đội hình, bài tập hằng ngày, điểm số Aim, ảnh chụp màn hình bằng chứng, đánh giá hiệu quả bằng AI và lịch Scrim được đồng bộ thời gian thực trên mọi máy tính và trình duyệt giữa{' '}
                 <strong className="text-white">Manager</strong> và các{' '}
-                <strong className="text-white">Tuyển thủ (Player)</strong>. Chỉ Manager mới có quyền thêm, xóa và kiểm soát tuyển thủ trong đội.
+                <strong className="text-white">Tuyển thủ (Player)</strong>.
               </p>
             </div>
 
@@ -553,25 +369,25 @@ export function AuthModal({
                   <span>Quyền Manager kiểm soát</span>
                 </div>
                 <p className="text-[11px] text-slate-400 leading-relaxed">
-                  Chỉ Manager mới được thêm tuyển thủ, cấp tài khoản, giao bài tập bắt buộc và duyệt bằng chứng.
+                  Chỉ Manager mới được thêm tuyển thủ, cấp tài khoản, giao nhiệm vụ và chốt lịch Scrim.
                 </p>
               </div>
               <div className="p-3.5 rounded-xl bg-[#121621] border border-white/[0.07] space-y-1">
                 <div className="flex items-center gap-1.5 text-xs font-semibold text-white">
                   <Crosshair className="w-3.5 h-3.5 text-violet-400" />
-                  <span>Database đồng nhất</span>
+                  <span>Đồng bộ Mọi Thiết Bị</span>
                 </div>
                 <p className="text-[11px] text-slate-400 leading-relaxed">
-                  Mọi cập nhật từ Manager và Tuyển thủ đều lưu chung trên một cơ sở dữ liệu đội tuyển duy nhất.
+                  Mọi máy tính và trình duyệt đều kết nối trực tiếp vào cùng một Cloud Firestore thời gian thực.
                 </p>
               </div>
               <div className="p-3.5 rounded-xl bg-[#121621] border border-white/[0.07] space-y-1">
                 <div className="flex items-center gap-1.5 text-xs font-semibold text-white">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>AI Drills &amp; Bằng chứng</span>
+                  <span>AI Nhận xét &amp; Đề xuất</span>
                 </div>
                 <p className="text-[11px] text-slate-400 leading-relaxed">
-                  Tự động tạo bài tập Tracking, Flick mỗi ngày và chụp màn hình chứng minh kết quả.
+                  Tuyển thủ tự khai báo bài tập Aim trong ngày, AI chấm điểm hiệu quả và gợi ý cần tập thêm gì.
                 </p>
               </div>
             </div>
@@ -584,8 +400,8 @@ export function AuthModal({
       </main>
 
       <footer className="w-full max-w-6xl mx-auto px-4 sm:px-6 pb-5 text-xs text-slate-500 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-        <span>VALORANT TRAINING HUB · Unified Esports Database</span>
-        <span>Hỗ trợ đăng nhập nhanh: noti (12345678) · binh (123456789) · kyro (123456)</span>
+        <span>VALORANT TRAINING HUB · Cloud Real-time Unified Database</span>
+        <span>Đăng nhập nhanh: noti (12345678) · binh (123456789)</span>
       </footer>
     </div>
   );

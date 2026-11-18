@@ -11,7 +11,7 @@ import {
   Trophy,
 } from 'lucide-react';
 import type {
-  AiDailyPlan,
+  AiTrainingEvaluation,
   AimLog,
   AvailabilitySlot,
   DataSourceMode,
@@ -43,7 +43,7 @@ interface DashboardViewProps {
   scrims: Scrim[];
   availabilities: AvailabilitySlot[];
   activeOwnerId?: string;
-  aiPlan?: AiDailyPlan | null;
+  aiEvaluation?: AiTrainingEvaluation | null;
   aiLoading?: boolean;
   onNavigate: (section: NavSection, dailyTab?: 'drills' | 'aim') => void;
   onToggleDrillComplete: (drill: TrainingDrill) => void;
@@ -72,7 +72,7 @@ export function DashboardView({
   scrims,
   availabilities,
   activeOwnerId,
-  aiPlan,
+  aiEvaluation,
   aiLoading,
   onNavigate,
   onToggleDrillComplete,
@@ -162,7 +162,7 @@ export function DashboardView({
         </button>
       </div>
 
-      {/* AI Daily Coach Banner */}
+      {/* AI Evaluation & What To Practice Next Banner */}
       <div className="bg-[#121621] border border-violet-500/25 rounded-xl px-4 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-start gap-3 min-w-0">
           <div className="p-2 rounded-lg bg-violet-500/15 text-violet-300 shrink-0">
@@ -170,14 +170,14 @@ export function DashboardView({
           </div>
           <div className="min-w-0">
             <div className="text-xs font-semibold text-white">
-              AI Coach — Giáo án Tracking & Flick hôm nay
+              Nhận xét bằng AI — Đánh giá hiệu quả tập Aim &amp; Cần tập luyện thêm những gì
             </div>
             <div className="text-xs text-slate-400 mt-0.5 truncate">
               {aiLoading
-                ? 'Đang tạo giáo án bài tập Tracking, Flicking & Micro Adjustment cho hôm nay...'
-                : aiPlan && aiPlan.date === todayDate
-                ? `${aiPlan.drills.length} bài tập gợi ý (${aiPlan.focusAreas.join(' · ')}) — ${aiPlan.coachNote}`
-                : 'Mở Daily Training để xem và thêm các bài tập Tracking, Flick do AI đề xuất mỗi ngày.'}
+                ? 'AI đang phân tích kết quả khai báo tập Aim và lập danh sách cần tập luyện thêm...'
+                : aiEvaluation && aiEvaluation.date === todayDate
+                ? `[${aiEvaluation.effectivenessScore}/100 · ${aiEvaluation.effectivenessLevel}] ${aiEvaluation.overallFeedback} · Cần tập thêm: ${aiEvaluation.whatToPracticeNext[0] || ''}`
+                : 'Mở Daily Training để khai báo hôm nay đã tập Aim những gì — sau khi Submit AI sẽ đánh giá mức độ hiệu quả và bổ sung cần tập luyện thêm những gì.'}
             </div>
           </div>
         </div>
@@ -186,7 +186,7 @@ export function DashboardView({
           onClick={() => onNavigate('daily-training')}
           className="px-3.5 py-2 rounded-lg bg-violet-500/20 hover:bg-violet-500/30 border border-violet-400/30 text-xs font-semibold text-violet-200 flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 self-start sm:self-center"
         >
-          <span>Xem giáo án AI</span>
+          <span>Khai báo &amp; Nhận xét AI</span>
           <ArrowUpRight className="w-3.5 h-3.5" />
         </button>
       </div>

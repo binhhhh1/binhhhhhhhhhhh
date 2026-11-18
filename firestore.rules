@@ -229,7 +229,76 @@ service cloud.firestore {
         data.createdAt is timestamp;
     }
 
+    function isValidHubWorkspace(data) {
+      return data.keys().hasAll(['id', 'syncToken', 'revision', 'isCustomized', 'updatedAtMs', 'updatedBy', 'team', 'accounts', 'members', 'drills', 'aimLogs', 'scrims', 'availabilities', 'templates', 'notifications', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'syncToken', 'revision', 'isCustomized', 'updatedAtMs', 'updatedBy', 'team', 'accounts', 'members', 'drills', 'aimLogs', 'scrims', 'availabilities', 'templates', 'notifications', 'updatedAt']) &&
+        data.id == 'team_valorant_training_hub' &&
+        data.syncToken is string && data.syncToken == 'vth_cloud_sync_v2' &&
+        data.revision is number && data.revision >= 0 && data.revision <= 1000000000 &&
+        data.isCustomized is bool &&
+        data.updatedAtMs is number && data.updatedAtMs >= 0 &&
+        data.updatedBy is string && data.updatedBy.size() >= 1 && data.updatedBy.size() <= 128 &&
+        data.team is map &&
+        data.accounts is list && data.accounts.size() >= 2 && data.accounts.size() <= 50 && data.accounts[0] is map &&
+        data.members is list && data.members.size() >= 2 && data.members.size() <= 50 && data.members[0] is map &&
+        data.drills is list && data.drills.size() <= 250 && (data.drills.size() == 0 || data.drills[0] is map) &&
+        data.aimLogs is list && data.aimLogs.size() <= 250 && (data.aimLogs.size() == 0 || data.aimLogs[0] is map) &&
+        data.scrims is list && data.scrims.size() <= 100 && (data.scrims.size() == 0 || data.scrims[0] is map) &&
+        data.availabilities is list && data.availabilities.size() <= 250 && (data.availabilities.size() == 0 || data.availabilities[0] is map) &&
+        data.templates is list && data.templates.size() <= 50 && (data.templates.size() == 0 || data.templates[0] is map) &&
+        data.notifications is list && data.notifications.size() <= 150 && (data.notifications.size() == 0 || data.notifications[0] is map) &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidHubProof(data) {
+      return data.keys().hasAll(['id', 'workspaceId', 'syncToken', 'dataUrl', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'workspaceId', 'syncToken', 'dataUrl', 'updatedAt']) &&
+        isValidId(data.id) &&
+        data.workspaceId == 'team_valorant_training_hub' &&
+        data.syncToken is string && data.syncToken == 'vth_cloud_sync_v2' &&
+        data.dataUrl is string && data.dataUrl.size() >= 10 && data.dataUrl.size() <= 750000 &&
+        data.updatedAt is timestamp;
+    }
+
     // --- Collection Rules ---
+    match /hubWorkspaces/{workspaceId} {
+      allow get: if isValidId(workspaceId) && workspaceId == 'team_valorant_training_hub';
+      allow list: if false;
+      allow create: if isValidId(workspaceId) &&
+        workspaceId == 'team_valorant_training_hub' &&
+        isValidHubWorkspace(incoming()) &&
+        incoming().id == workspaceId &&
+        incoming().updatedAt == request.time;
+      allow update: if isValidId(workspaceId) &&
+        workspaceId == 'team_valorant_training_hub' &&
+        isValidHubWorkspace(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().syncToken == existing().syncToken &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['revision', 'isCustomized', 'updatedAtMs', 'updatedBy', 'team', 'accounts', 'members', 'drills', 'aimLogs', 'scrims', 'availabilities', 'templates', 'notifications', 'updatedAt']);
+      allow delete: if false;
+
+      match /proofs/{proofId} {
+        allow get: if isValidId(workspaceId) && isValidId(proofId) && workspaceId == 'team_valorant_training_hub';
+        allow list: if resource.data.workspaceId == 'team_valorant_training_hub' && resource.data.syncToken == 'vth_cloud_sync_v2';
+        allow create: if isValidId(workspaceId) && isValidId(proofId) &&
+          workspaceId == 'team_valorant_training_hub' &&
+          isValidHubProof(incoming()) &&
+          incoming().id == proofId &&
+          incoming().workspaceId == workspaceId &&
+          incoming().updatedAt == request.time;
+        allow update: if isValidId(workspaceId) && isValidId(proofId) &&
+          workspaceId == 'team_valorant_training_hub' &&
+          isValidHubProof(incoming()) &&
+          incoming().id == existing().id &&
+          incoming().workspaceId == existing().workspaceId &&
+          incoming().syncToken == existing().syncToken &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['dataUrl', 'updatedAt']);
+        allow delete: if isValidId(workspaceId) && isValidId(proofId) && workspaceId == 'team_valorant_training_hub';
+      }
+    }
+
     match /admins/{adminId} {
       allow get: if isOwner(adminId) || isAdmin();
       allow list, create, update, delete: if false;

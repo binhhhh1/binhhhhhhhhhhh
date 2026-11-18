@@ -7,7 +7,9 @@ import { GoogleGenAI, Type } from '@google/genai';
 import {
   buildSmartTacticalDailyPlan,
   DEFAULT_AI_FOCUS_AREAS,
+  evaluateAimTrainingSession,
   normalizeGeneratedDrills,
+  parseAiEvaluationResponseSafely,
 } from './src/utils/aiDrills.ts';
 import { DRILL_CATEGORIES } from './src/types/training.ts';
 
@@ -106,6 +108,148 @@ async function startServer() {
     res.json({ ok: true, updatedAt: payload.updatedAt });
   });
 
+  app.post('/api/ai/evaluate-training', async (req, res) => {
+    const body = (req.body || {}) as {
+      date?: string;
+      ownerId?: string;
+      playerName?: string;
+      gameRole?: string;
+      mainAgent?: string;
+      reportedSummary?: string;
+      durationMin?: number;
+      scoreOrResult?: string;
+      accuracyPct?: number;
+      headshotPct?: number;
+    };
+
+    const evalInput = {
+      date:
+        typeof body.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.date)
+          ? body.date
+          : new Date().toISOString().slice(0, 10),
+      ownerId: String(body.ownerId || 'player').slice(0, 80),
+      playerName: String(body.playerName || 'Tuyển thủ').slice(0, 60),
+      gameRole: String(body.gameRole || 'Duelist').slice(0, 40),
+      mainAgent: String(body.mainAgent || 'Jett').slice(0, 40),
+      reportedSummary: String(
+        body.reportedSummary || 'Luyện tập Aim hằng ngày',
+      ).slice(0, 800),
+      durationMin: Math.max(5, Math.min(360, Number(body.durationMin) || 45)),
+      scoreOrResult: String(body.scoreOrResult || '').slice(0, 160),
+      accuracyPct: Math.max(10, Math.min(100, Number(body.accuracyPct) || 88)),
+      headshotPct: Math.max(5, Math.min(100, Number(body.headshotPct) || 35)),
+    };
+
+    const ai = createAiClient();
+    if (!ai) {
+      res.json(evaluateAimTrainingSession(evalInput));
+      return;
+    }
+
+    const prompt = [
+      `Đánh giá mức độ hiệu quả buổi tập Aim Valorant ngày ${evalInput.date} của tuyển thủ ${evalInput.playerName} (Role: ${evalInput.gameRole}, Main Agent: ${evalInput.mainAgent}).`,
+      `Nội dung tuyển thủ tự khai báo đã tập hôm nay: "${evalInput.reportedSummary}".`,
+      `Thời lượng đã tập: ${evalInput.durationMin} phút.`,
+      `Kết quả / Điểm số: ${evalInput.scoreOrResult || 'Không ghi chú thêm'} · Accuracy: ${evalInput.accuracyPct}% · Headshot Rate: ${evalInput.headshotPct}%.`,
+      `Hãy đóng vai Huấn luyện viên Hiệu suất & Aim Coach Valorant chuyên nghiệp:`,
+      `1. Chấm điểm hiệu quả (effectivenessScore từ 0 đến 100) và xếp loại (effectivenessLevel: "Xuất sắc", "Hiệu quả cao", "Đạt yêu cầu" hoặc "Cần cải thiện").`,
+      `2. Nhận xét chi tiết mức độ hiệu quả buổi tập (overallFeedback), nêu rõ điểm mạnh (strengths) và điểm còn thiếu/yếu (weaknesses).`,
+      `3. Bổ sung cụ thể tuyển thủ CẦN TẬP LUYỆN THÊM NHỮNG GÌ (whatToPracticeNext) và đề xuất 3 bài tập cụ thể (recommendedDrills) phù hợp với ${evalInput.mainAgent} (${evalInput.gameRole}).`,
+    ].join('\n');
+
+    try {
+      const modelsToTry = [MODEL_NAME, 'gemini-3.1-flash-lite'];
+      let response: Awaited<ReturnType<typeof ai.models.generateContent>> | null =
+        null;
+
+      for (let i = 0; i < modelsToTry.length; i++) {
+        try {
+          response = await ai.models.generateContent({
+            model: modelsToTry[i],
+            contents: prompt,
+            config: {
+              systemInstruction:
+                'Bạn là Huấn luyện viên Aim & Hiệu suất Esports Valorant chuyên nghiệp. Trả về đúng JSON theo schema bằng tiếng Việt.',
+              responseMimeType: 'application/json',
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  effectivenessScore: { type: Type.NUMBER },
+                  effectivenessLevel: {
+                    type: Type.STRING,
+                    enum: [
+                      'Xuất sắc',
+                      'Hiệu quả cao',
+                      'Đạt yêu cầu',
+                      'Cần cải thiện',
+                    ],
+                  },
+                  overallFeedback: { type: Type.STRING },
+                  strengths: {
+                    type: Type.ARRAY,
+                    items: { type: Type.STRING },
+                  },
+                  weaknesses: {
+                    type: Type.ARRAY,
+                    items: { type: Type.STRING },
+                  },
+                  whatToPracticeNext: {
+                    type: Type.ARRAY,
+                    items: { type: Type.STRING },
+                  },
+                  recommendedDrills: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        title: { type: Type.STRING },
+                        category: {
+                          type: Type.STRING,
+                          enum: [...DRILL_CATEGORIES],
+                        },
+                        focusTag: { type: Type.STRING },
+                        startTime: { type: Type.STRING },
+                        durationMin: { type: Type.NUMBER },
+                        goal: { type: Type.STRING },
+                        description: { type: Type.STRING },
+                      },
+                      required: [
+                        'title',
+                        'category',
+                        'focusTag',
+                        'startTime',
+                        'durationMin',
+                        'goal',
+                        'description',
+                      ],
+                    },
+                  },
+                },
+                required: [
+                  'effectivenessScore',
+                  'effectivenessLevel',
+                  'overallFeedback',
+                  'strengths',
+                  'weaknesses',
+                  'whatToPracticeNext',
+                  'recommendedDrills',
+                ],
+              },
+            },
+          });
+          break;
+        } catch (err) {
+          if (i === modelsToTry.length - 1) throw err;
+        }
+      }
+
+      const rawText = response?.text || '';
+      res.json(parseAiEvaluationResponseSafely(rawText, evalInput));
+    } catch {
+      res.json(evaluateAimTrainingSession(evalInput));
+    }
+  });
+
   app.post('/api/ai/generate-daily-drills', async (req, res) => {
     const body = (req.body || {}) as {
       date?: string;
@@ -173,7 +317,6 @@ async function startServer() {
     try {
       const modelsToTry = [MODEL_NAME, 'gemini-3.1-flash-lite'];
       let response: Awaited<ReturnType<typeof ai.models.generateContent>> | null = null;
-      let lastErr: unknown = null;
 
       for (let i = 0; i < modelsToTry.length; i++) {
         const model = modelsToTry[i];
@@ -241,7 +384,6 @@ async function startServer() {
           });
           break;
         } catch (modelErr) {
-          lastErr = modelErr;
           const msg = modelErr instanceof Error ? modelErr.message : String(modelErr);
           const isTransient =
             msg.includes('503') ||
